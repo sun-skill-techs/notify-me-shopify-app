@@ -2,7 +2,7 @@
 
 client_id = "ea7adf8906376c08ec1de8b1c3d09e5e"
 name = "Notify Me"
-application_url = "https://example.com"
+application_url = "https://notify-me-shopify-app-production.up.railway.app"
 embedded = true
 
 [access_scopes]
@@ -11,7 +11,7 @@ embedded = true
 scopes = "read_products,write_app_proxy"
 
 [app_proxy]
-url = "https://example.com/proxy"
+url = "https://notify-me-shopify-app-production.up.railway.app/proxy"
 prefix = "apps"
 subpath = "notify-me"
 
@@ -44,7 +44,7 @@ api_version = "2026-07"
   compliance_topics = [ "shop/redact" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://notify-me-shopify-app-production.up.railway.app/auth/callback" ]
 
 [build]
 include_config_on_deploy = true
