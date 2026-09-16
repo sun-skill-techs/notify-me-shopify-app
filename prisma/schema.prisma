@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model RestockSubscription {
+  id             String    @id @default(cuid())
+  shop           String
+  productId      String
+  variantId      String
+  email          String
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+  unsubscribedAt DateTime?
+
+  // One live request per shopper per variant; re-subscribing after a send reuses the row.
+  @@unique([shop, variantId, email])
+  @@index([shop, variantId, status])
+}
+
+model ShopSettings {
+  shop        String   @id
+  buttonText  String   @default("Notify me when available")
+  emailSubject String  @default("{{product}} is back in stock")
+  fromName    String   @default("")
+  updatedAt   DateTime @updatedAt
+}

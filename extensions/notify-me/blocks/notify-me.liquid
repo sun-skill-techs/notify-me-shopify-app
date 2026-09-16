@@ -1,0 +1,147 @@
+{% comment %}
+  Renders only for a sold-out variant. Inherits theme typography; merchants
+  control the copy and surface style from the theme editor.
+{% endcomment %}
+
+{% unless product.selected_or_first_available_variant.available %}
+  <div
+    class="notify-me notify-me--{{ block.settings.style }}"
+    data-notify-me
+    data-product-id="{{ product.id }}"
+    data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+    data-proxy="{{ shop.url }}/apps/notify-me"
+    style="--notify-me-radius: {{ block.settings.corner_radius }}px;"
+  >
+    <form data-notify-me-form novalidate>
+      <div class="notify-me__header">
+        {% if block.settings.show_icon %}
+          <span class="notify-me__icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2.5 5.5h15v10h-15z"></path>
+              <path d="m2.5 6 7.5 5.5L17.5 6"></path>
+            </svg>
+          </span>
+        {% endif %}
+        <div class="notify-me__heading-group">
+          <label class="notify-me__label" for="notify-me-email-{{ block.id }}">
+            {{ block.settings.heading }}
+          </label>
+          {% if block.settings.subheading != blank %}
+            <p class="notify-me__subheading">{{ block.settings.subheading }}</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="notify-me__row">
+        <div class="notify-me__field">
+          <input
+            id="notify-me-email-{{ block.id }}"
+            class="notify-me__input"
+            type="email"
+            name="email"
+            required
+            autocomplete="email"
+            placeholder="{{ block.settings.placeholder }}"
+            aria-describedby="notify-me-message-{{ block.id }}"
+          >
+        </div>
+        <button class="notify-me__button" type="submit" data-notify-me-button>
+          <span class="notify-me__button-label">{{ block.settings.button_text }}</span>
+          <span class="notify-me__spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <p class="notify-me__fine-print">
+        {{ block.settings.fine_print }}
+        {% if block.settings.privacy_url != blank %}
+          <a class="notify-me__link" href="{{ block.settings.privacy_url }}" target="_blank" rel="noopener">Privacy policy</a>
+        {% endif %}
+      </p>
+
+      <p
+        id="notify-me-message-{{ block.id }}"
+        class="notify-me__message"
+        data-notify-me-message
+        role="status"
+        aria-live="polite"
+      ></p>
+    </form>
+  </div>
+{% endunless %}
+
+{% schema %}
+{
+  "name": "Notify me",
+  "target": "section",
+  "stylesheet": "notify-me.css",
+  "javascript": "notify-me.js",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Email me when this is back"
+    },
+    {
+      "type": "text",
+      "id": "subheading",
+      "label": "Subheading",
+      "default": "We'll let you know the moment it's back in stock."
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Notify me"
+    },
+    {
+      "type": "text",
+      "id": "placeholder",
+      "label": "Email placeholder",
+      "default": "you@example.com"
+    },
+    {
+      "type": "text",
+      "id": "fine_print",
+      "label": "Fine print",
+      "default": "One email when this item returns. Not a marketing list."
+    },
+    {
+      "type": "url",
+      "id": "privacy_url",
+      "label": "Privacy policy link"
+    },
+    {
+      "type": "header",
+      "content": "Appearance"
+    },
+    {
+      "type": "select",
+      "id": "style",
+      "label": "Style",
+      "options": [
+        { "value": "card", "label": "Card" },
+        { "value": "outlined", "label": "Outlined" },
+        { "value": "plain", "label": "Plain" }
+      ],
+      "default": "card"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_icon",
+      "label": "Show icon",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "corner_radius",
+      "label": "Corner radius",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "unit": "px",
+      "default": 10
+    }
+  ]
+}
+{% endschema %}

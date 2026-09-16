@@ -1,0 +1,51 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "ea7adf8906376c08ec1de8b1c3d09e5e"
+name = "Notify Me"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+# read_products covers product/variant reads and the variants/in_stock webhook.
+# write_app_proxy is required to serve the storefront subscribe/unsubscribe endpoints.
+scopes = "read_products,write_app_proxy"
+
+[app_proxy]
+url = "https://example.com/proxy"
+prefix = "apps"
+subpath = "notify-me"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  # Fires with the variant GID once a variant is back in stock online.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/variants/in_stock"
+  topics = [ "variants/in_stock" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
