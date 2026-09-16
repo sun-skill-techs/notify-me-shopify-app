@@ -1,7 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "ea7adf8906376c08ec1de8b1c3d09e5e"
-name = "Notify Me"
+name = "Restock Alerts"
+handle = "restock-alerts-sun-skill-techs"
 application_url = "https://notify-me-shopify-app-production.up.railway.app"
 embedded = true
 
