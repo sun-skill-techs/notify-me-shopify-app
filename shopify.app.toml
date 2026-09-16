@@ -16,7 +16,7 @@ prefix = "apps"
 subpath = "notify-me"
 
 [webhooks]
-api_version = "2026-10"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
