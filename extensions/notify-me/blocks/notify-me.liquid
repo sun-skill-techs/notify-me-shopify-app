@@ -10,7 +10,7 @@
 {% if sold_out_count > 0 %}
   {% capture variant_availability %}
     {%- for variant in product.variants -%}
-      {{- variant.id }}:{% if variant.available %}1{% else %}0{% endif %}{% unless forloop.last %},{% endunless %}
+      {{- variant.id }}:{% if variant.available %}1{% else %}0{% endif %}{% unless forloop.last %},{% endunless -%}
     {%- endfor -%}
   {% endcapture %}
   <div
