@@ -68,16 +68,59 @@ document.addEventListener("input", (event) => {
 });
 
 // Themes re-render the product form on variant change; keep the stored variant
-// in sync and reopen the form so the shopper can sign up for the new variant.
-document.addEventListener("change", (event) => {
-  if (!event.target.name || event.target.name !== "id") return;
-  const root = document.querySelector("[data-notify-me]");
-  if (!root) return;
-  root.dataset.variantId = event.target.value;
+// in sync, show the form only while the chosen variant is sold out, and reopen
+// it so the shopper can sign up for the new variant.
+const soldOutVariants = (root) =>
+  new Set(
+    (root.dataset.variantAvailability || "")
+      .split(",")
+      .filter((pair) => pair.endsWith(":0"))
+      .map((pair) => pair.split(":")[0]),
+  );
+
+const syncVariant = (root, variantId) => {
+  if (!variantId) return;
+  root.dataset.variantId = variantId;
+  root.hidden = !soldOutVariants(root).has(String(variantId));
   delete root.dataset.state;
   const message = root.querySelector("[data-notify-me-message]");
   if (message) {
     message.dataset.tone = "";
     message.textContent = "";
   }
+};
+
+// Some themes swap variants via the URL (?variant=) without firing a change
+// event on a named "id" input, so mirror the URL on load and on history moves.
+// Liquid's own `hidden` can also be stale if the variant was pre-selected
+// client-side before this script ran, so re-sync against the root's own
+// data-variant-id (set correctly by the server) as a fallback.
+const syncFromUrl = () => {
+  const root = document.querySelector("[data-notify-me]");
+  if (!root) return;
+  const variantId =
+    new URLSearchParams(location.search).get("variant") ||
+    root.dataset.variantId;
+  if (variantId) syncVariant(root, variantId);
+};
+
+// Some themes dispatch a synthetic "change" on the variant input while their
+// picker hydrates on load, broadcasting whatever the picker's default/first
+// option is rather than the actually pre-selected variant. That's not a real
+// shopper action (isTrusted is false for script-dispatched events), and
+// acting on it is what flashes the widget open and immediately hides it
+// again on page load. Only genuine, user-triggered changes should resync.
+document.addEventListener("change", (event) => {
+  if (!event.target.name || event.target.name !== "id") return;
+  if (!event.isTrusted) return;
+  const root = document.querySelector("[data-notify-me]");
+  if (!root) return;
+  syncVariant(root, event.target.value);
 });
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", syncFromUrl);
+} else {
+  syncFromUrl();
+}
+window.addEventListener("popstate", syncFromUrl);
