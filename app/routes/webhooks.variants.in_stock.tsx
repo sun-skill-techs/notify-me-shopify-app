@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import { notifyVariant } from "../notify.server";
+import { buyableVariant, notifyVariant } from "../notify.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload, admin } = await authenticate.webhook(request);
@@ -15,31 +15,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // The webhook only says stock changed. Confirm it's really buyable before emailing,
   // since a failed send can't be taken back.
-  const response = await admin.graphql(
-    `#graphql
-      query notifyMeVariant($id: ID!) {
-        productVariant(id: $id) {
-          id
-          availableForSale
-          product { title onlineStoreUrl }
-        }
-      }`,
-    { variables: { id: variantGid } },
-  );
-  const { data } = await response.json();
-  const variant = data?.productVariant;
+  const variant = await buyableVariant(admin, variantGid);
+  if (!variant) return new Response();
 
-  if (!variant?.availableForSale || !variant.product?.onlineStoreUrl) {
-    return new Response();
-  }
-
-  const result = await notifyVariant({
-    shop,
-    variantId: variantGid.split("/").pop()!,
-    productTitle: variant.product.title,
-    productUrl: `${variant.product.onlineStoreUrl}?variant=${variantGid.split("/").pop()}`,
-  });
-  console.log(`notify-me: ${result.sent} sent, ${result.failed} failed`);
+  // Shopify retries the webhook if we take longer than 5s, and a long waitlist
+  // does. Respond now; notifyVariant claims each row so a retry can't double-send.
+  void notifyVariant({ shop, ...variant })
+    .then((r) => console.log(`notify-me: ${r.sent} sent, ${r.failed} failed`))
+    .catch((e) => console.error("notify-me: notify failed", e));
 
   return new Response();
 };

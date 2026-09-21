@@ -20,6 +20,7 @@ export default function App() {
       <s-app-nav>
         <s-link href="/app">Home</s-link>
         <s-link href="/app/waitlist">Waitlist</s-link>
+        <s-link href="/app/settings">Email settings</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

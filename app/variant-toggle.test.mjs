@@ -38,3 +38,26 @@ assert.equal(isHidden("1:0,2:0", "2"), false);
 assert.equal(isHidden(undefined, "1"), true);
 
 console.log("variant toggle: all assertions passed");
+
+// Mirrors resolveVariant in notify-me.js: which variant a change on
+// input[name=id] really selected. Dawn dispatches synthetic changes, so a
+// trusted-only rule (the old behaviour) silently broke variant switching there.
+const SETTLE_MS = 1500;
+const resolveVariant = (event, { url, now }) => {
+  if (event.isTrusted) return event.target.value;
+  return url || (now > SETTLE_MS ? event.target.value : null);
+};
+
+// Real user change on a <select name="id">: use its value.
+assert.equal(resolveVariant({ isTrusted: true, target: { value: "2" } }, { url: null, now: 100 }), "2");
+
+// Dawn: URL updated first, then synthetic change. URL wins, and it works on load.
+assert.equal(resolveVariant({ isTrusted: false, target: { value: "1" } }, { url: "2", now: 100 }), "2");
+
+// Hydration flash: synthetic change, no URL, right after load. Ignored.
+assert.equal(resolveVariant({ isTrusted: false, target: { value: "1" } }, { url: null, now: 100 }), null);
+
+// Synthetic change from a real click later on, theme that doesn't touch the URL. Applied.
+assert.equal(resolveVariant({ isTrusted: false, target: { value: "3" } }, { url: null, now: 5000 }), "3");
+
+console.log("variant resolver: all assertions passed");

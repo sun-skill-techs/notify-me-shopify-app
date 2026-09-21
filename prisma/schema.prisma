@@ -54,5 +54,6 @@ model ShopSettings {
   buttonText  String   @default("Notify me when available")
   emailSubject String  @default("{{product}} is back in stock")
   fromName    String   @default("")
+  testSentAt  DateTime?
   updatedAt   DateTime @updatedAt
 }

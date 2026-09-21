@@ -14,6 +14,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const variantId = String(form.get("variantId") ?? "");
   const productId = String(form.get("productId") ?? "");
 
+  // Honeypot: real shoppers never see this field. Bots that fill it get a quiet
+  // "ok" so they stop, and nothing is stored.
+  if (String(form.get("website") ?? "")) return Response.json({ ok: true });
+
   // Trust boundary: this input comes straight from a storefront visitor.
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) {
     return Response.json({ error: "Enter a valid email address." }, { status: 400 });

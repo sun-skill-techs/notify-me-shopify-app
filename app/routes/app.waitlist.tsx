@@ -1,8 +1,15 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useEffect, useState } from "react";
+import type {
+  ActionFunctionArgs,
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { buyableVariant, notifyVariant } from "../notify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -40,7 +47,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       variant: "",
       image: null,
     };
-    const key = row.status.toLowerCase() as keyof typeof entry;
+    // SENDING rows are still waiting from the merchant's point of view.
+    const key = (row.status === "SENDING" ? "pending" : row.status.toLowerCase()) as keyof typeof entry;
     if (key in entry && typeof entry[key] === "number") {
       (entry[key] as number) += row._count._all;
     }
@@ -49,8 +57,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const variants = [...byVariant.values()].sort((a, b) => b.pending - a.pending);
 
-  // Look up titles in one request so the table reads as products, not IDs.
-  if (variants.length > 0) {
+  // Look up titles so the table reads as products, not IDs. nodes() caps at 250
+  // ids per call, so chunk well under it.
+  for (let i = 0; i < variants.length; i += 100) {
+    const chunk = variants.slice(i, i + 100);
     const response = await admin.graphql(
       `#graphql
         query notifyMeWaitlistTitles($ids: [ID!]!) {
@@ -65,7 +75,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }`,
       {
         variables: {
-          ids: variants.map((v) => `gid://shopify/ProductVariant/${v.variantId}`),
+          ids: chunk.map((v) => `gid://shopify/ProductVariant/${v.variantId}`),
         },
       },
     );
@@ -97,6 +107,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { variants, totals, storeHandle };
 };
 
+// "Retry failed": put a variant's failed rows back in the queue and, if it is in
+// stock right now, send them immediately.
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session, admin } = await authenticate.admin(request);
+  const form = await request.formData();
+  const variantId = String(form.get("variantId") ?? "");
+  if (!/^\d+$/.test(variantId)) return { ok: false, message: "Unknown variant" };
+
+  const { count } = await db.restockSubscription.updateMany({
+    where: { shop: session.shop, variantId, status: "FAILED" },
+    data: { status: "PENDING" },
+  });
+  if (count === 0) return { ok: true, message: "Nothing to retry" };
+
+  const variant = await buyableVariant(admin, `gid://shopify/ProductVariant/${variantId}`);
+  if (!variant) {
+    return {
+      ok: true,
+      message: `${count} moved back to waiting. They'll be emailed when it's in stock.`,
+    };
+  }
+  const r = await notifyVariant({ shop: session.shop, ...variant });
+  return {
+    ok: r.failed === 0,
+    message: r.failed ? `${r.sent} sent, ${r.failed} failed again` : `${r.sent} sent`,
+  };
+};
+
 /** Zero counts stay quiet so the eye lands on real demand. */
 function Count({
   value,
@@ -115,8 +153,45 @@ function Count({
   );
 }
 
+/** Downloads the CSV through App Bridge's fetch so the request is authenticated. */
+function ExportButton() {
+  const [busy, setBusy] = useState(false);
+  const shopify = useAppBridge();
+  const download = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/app/waitlist/export");
+      if (!res.ok) throw new Error(String(res.status));
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement("a"), {
+        href: url,
+        download: `waitlist-${new Date().toISOString().slice(0, 10)}.csv`,
+      });
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      shopify.toast.show("Export failed. Try again.", { isError: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <s-button slot="secondary-actions" icon="export" onClick={download} disabled={busy}>
+      Export CSV
+    </s-button>
+  );
+}
+
 export default function WaitlistPage() {
   const { variants, totals, storeHandle } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<typeof action>();
+  const shopify = useAppBridge();
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      shopify.toast.show(fetcher.data.message, { isError: !fetcher.data.ok });
+    }
+  }, [fetcher.state, fetcher.data, shopify]);
 
   if (variants.length === 0) {
     return (
@@ -132,7 +207,7 @@ export default function WaitlistPage() {
               <s-heading>No one is waiting yet</s-heading>
               <s-paragraph color="subdued">
                 Once the app block is live on your product template, sold-out
-                variants collect signups here — ranked by how many shoppers are
+                variants collect signups here, ranked by how many shoppers are
                 waiting.
               </s-paragraph>
               <s-button href="/app" variant="primary" icon="theme-template">
@@ -146,9 +221,11 @@ export default function WaitlistPage() {
   }
 
   const top = variants[0];
+  const retrying = fetcher.state !== "idle" ? fetcher.formData?.get("variantId") : null;
 
   return (
     <s-page heading="Waitlist">
+      <ExportButton />
       <s-button slot="secondary-actions" href="/app" variant="secondary">
         Back to overview
       </s-button>
@@ -179,6 +256,7 @@ export default function WaitlistPage() {
               <s-table-header format="numeric">Sent</s-table-header>
               <s-table-header format="numeric">Failed</s-table-header>
               <s-table-header format="numeric">Unsubscribed</s-table-header>
+              <s-table-header listSlot="secondary"></s-table-header>
             </s-table-header-row>
             <s-table-body>
               {variants.map((variant) => (
@@ -219,6 +297,23 @@ export default function WaitlistPage() {
                   </s-table-cell>
                   <s-table-cell>
                     <Count value={variant.unsubscribed} tone="neutral" />
+                  </s-table-cell>
+                  <s-table-cell>
+                    {variant.failed > 0 && (
+                      <s-button
+                        variant="tertiary"
+                        icon="reset"
+                        disabled={retrying === variant.variantId}
+                        onClick={() =>
+                          fetcher.submit(
+                            { variantId: variant.variantId },
+                            { method: "post" },
+                          )
+                        }
+                      >
+                        Retry failed
+                      </s-button>
+                    )}
                   </s-table-cell>
                 </s-table-row>
               ))}

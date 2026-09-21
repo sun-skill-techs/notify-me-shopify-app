@@ -10,6 +10,7 @@
   --notify-me-surface: color-mix(in srgb, currentColor 3.5%, transparent);
   --notify-me-field: color-mix(in srgb, currentColor 2%, transparent);
   --notify-me-accent: currentColor;
+  --notify-me-gold: #a9812f;
   --notify-me-gap: 0.75rem;
 
   margin: 1.5rem 0;
@@ -19,9 +20,9 @@
 }
 
 .notify-me--card {
-  padding: 1.25rem;
-  border: 1px solid var(--notify-me-hairline);
-  border-radius: var(--notify-me-radius);
+  padding: 1.75rem 1.75rem 1.5rem;
+  border-top: 1px solid var(--notify-me-gold);
+  border-radius: 0;
   background: var(--notify-me-surface);
 }
 
@@ -33,13 +34,76 @@
 
 /* .notify-me--plain keeps the default: no surface, no padding. */
 
+/* Trigger -------------------------------------------------------------
+   Collapsed state: a single button in place of the disabled add-to-cart
+   button, so the form's height is only spent once the shopper asks for it. */
+
+.notify-me__trigger {
+  display: inline-flex;
+  width: 100%;
+  min-height: 2.875rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid var(--notify-me-hairline-strong);
+  border-radius: calc(var(--notify-me-radius) * 0.7);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.notify-me__trigger:hover:not([disabled]) {
+  border-color: var(--notify-me-accent);
+}
+
+.notify-me__trigger:focus-visible {
+  outline: 2px solid var(--notify-me-accent);
+  outline-offset: 2px;
+}
+
+.notify-me__trigger[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Header ------------------------------------------------------------- */
+
+.notify-me__eyebrow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--notify-me-gold);
+}
+
+.notify-me__eyebrow::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 50%;
+  background: currentColor;
+}
 
 .notify-me__header {
   display: flex;
   gap: var(--notify-me-gap);
   align-items: flex-start;
-  margin-bottom: 1rem;
+  margin-bottom: 0.625rem;
+}
+
+.notify-me--card .notify-me__icon {
+  display: none;
 }
 
 .notify-me__icon {
@@ -51,7 +115,6 @@
   height: 2.25rem;
   border-radius: calc(var(--notify-me-radius) * 0.65);
   background: color-mix(in srgb, currentColor 7%, transparent);
-  /* Optical alignment with the cap height of the label beside it. */
   margin-block-start: 0.05rem;
 }
 
@@ -66,25 +129,39 @@
 
 .notify-me__label {
   display: block;
-  font-size: 1.0625rem;
-  font-weight: 600;
-  line-height: 1.3;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
 .notify-me__subheading {
-  margin: 0.25rem 0 0;
-  font-size: 0.875rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
   line-height: 1.5;
   opacity: 0.68;
 }
 
 /* Form --------------------------------------------------------------- */
 
+/* Off-screen rather than display:none so bots still "see" the honeypot. */
+.notify-me__hp {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
 .notify-me__row {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--notify-me-hairline-strong);
 }
 
 .notify-me__field {
@@ -94,18 +171,15 @@
 
 .notify-me__input {
   width: 100%;
-  min-height: 2.875rem;
-  padding: 0.75rem 0.875rem;
-  border: 1px solid var(--notify-me-hairline-strong);
-  border-radius: calc(var(--notify-me-radius) * 0.7);
+  min-height: 2.5rem;
+  padding: 0.25rem 0;
+  border: none;
+  border-radius: 0;
   font: inherit;
   font-size: 0.9375rem;
   color: inherit;
-  background: var(--notify-me-field);
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease;
+  background: none;
+  transition: opacity 0.15s ease;
 }
 
 .notify-me__input::placeholder {
@@ -113,20 +187,12 @@
   opacity: 0.42;
 }
 
-.notify-me__input:hover {
-  border-color: color-mix(in srgb, currentColor 40%, transparent);
-}
-
 .notify-me__input:focus {
   outline: none;
-  border-color: var(--notify-me-accent);
-  background: transparent;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent);
 }
 
 .notify-me__input[aria-invalid="true"] {
-  border-color: #d72c0d;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #d72c0d 18%, transparent);
+  color: #d72c0d;
 }
 
 .notify-me__button {
@@ -135,29 +201,28 @@
   gap: 0.5rem;
   align-items: center;
   justify-content: center;
-  min-height: 2.875rem;
-  padding: 0.75rem 1.5rem;
-  border: 1px solid transparent;
-  border-radius: calc(var(--notify-me-radius) * 0.7);
+  min-height: 2.5rem;
+  padding: 0.25rem 0;
+  border: none;
+  border-radius: 0;
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.005em;
-  color: var(--notify-me-button-fg, Canvas);
-  background: var(--notify-me-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: inherit;
+  background: none;
   cursor: pointer;
-  transition:
-    opacity 0.15s ease,
-    transform 0.1s ease;
+  transition: opacity 0.15s ease;
 }
 
 .notify-me__button:hover:not([disabled]) {
-  opacity: 0.86;
+  opacity: 0.6;
 }
 
 .notify-me__button:active:not([disabled]) {
-  transform: translateY(1px);
+  opacity: 0.75;
 }
 
 .notify-me__button:focus-visible {
@@ -198,7 +263,8 @@
 /* Supporting text ---------------------------------------------------- */
 
 .notify-me__fine-print {
-  margin: 0.75rem 0 0;
+  margin: 1.25rem 0 0;
+  font-style: italic;
   font-size: 0.8125rem;
   line-height: 1.5;
   opacity: 0.6;
@@ -258,12 +324,6 @@
     color: #ffd6d0;
     background: #8e1f0b;
   }
-}
-
-/* Once the signup succeeds the form gives way to the confirmation alone. */
-.notify-me[data-state="done"] .notify-me__row,
-.notify-me[data-state="done"] .notify-me__fine-print {
-  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

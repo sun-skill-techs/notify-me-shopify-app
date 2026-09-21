@@ -2,8 +2,9 @@
   Renders on any product that has a sold-out variant, and hides itself via
   [hidden] when the selected variant is in stock. The availability of every
   variant is passed to the JS so switching variants toggles the form without a
-  page load. Inherits theme typography; merchants control the copy and surface
-  style from the theme editor.
+  page load. Starts collapsed behind a trigger button; the form only takes up
+  space once the shopper clicks it. Inherits theme typography; merchants
+  control the copy and surface style from the theme editor.
 {% endcomment %}
 
 {% assign sold_out_count = product.variants | where: "available", false | size %}
@@ -20,10 +21,25 @@
     data-variant-id="{{ product.selected_or_first_available_variant.id }}"
     data-variant-availability="{{ variant_availability | strip }}"
     data-proxy="{{ shop.url }}/apps/notify-me"
+    data-success-text="{{ block.settings.success_text | escape }}"
+    data-invalid-text="{{ block.settings.invalid_text | escape }}"
+    data-error-text="{{ block.settings.error_text | escape }}"
     style="--notify-me-radius: {{ block.settings.corner_radius }}px;"
     {% if product.selected_or_first_available_variant.available %}hidden{% endif %}
   >
-    <form data-notify-me-form novalidate>
+    <button
+      type="button"
+      class="notify-me__trigger"
+      data-notify-me-trigger
+      data-default-text="{{ block.settings.trigger_text }}"
+    >
+      {{ block.settings.trigger_text }}
+    </button>
+
+    <form data-notify-me-form novalidate hidden>
+      {% if block.settings.eyebrow != blank %}
+        <p class="notify-me__eyebrow">{{ block.settings.eyebrow }}</p>
+      {% endif %}
       <div class="notify-me__header">
         {% if block.settings.show_icon %}
           <span class="notify-me__icon" aria-hidden="true">
@@ -42,6 +58,9 @@
           {% endif %}
         </div>
       </div>
+
+      {%- comment -%} Honeypot: hidden from people, filled by bots, rejected server-side. {%- endcomment -%}
+      <input class="notify-me__hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
 
       <div class="notify-me__row">
         <div class="notify-me__field">
@@ -89,6 +108,18 @@
   "settings": [
     {
       "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow label",
+      "default": "Restock notice"
+    },
+    {
+      "type": "text",
+      "id": "trigger_text",
+      "label": "Trigger button text",
+      "default": "Notify me when available"
+    },
+    {
+      "type": "text",
       "id": "heading",
       "label": "Heading",
       "default": "Email me when this is back"
@@ -121,6 +152,28 @@
       "type": "url",
       "id": "privacy_url",
       "label": "Privacy policy link"
+    },
+    {
+      "type": "header",
+      "content": "Messages"
+    },
+    {
+      "type": "text",
+      "id": "success_text",
+      "label": "After signing up",
+      "default": "You're on the list"
+    },
+    {
+      "type": "text",
+      "id": "invalid_text",
+      "label": "Invalid email",
+      "default": "Enter a valid email address."
+    },
+    {
+      "type": "text",
+      "id": "error_text",
+      "label": "Something went wrong",
+      "default": "Something went wrong. Try again."
     },
     {
       "type": "header",
