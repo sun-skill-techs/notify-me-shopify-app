@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
-  LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
@@ -20,9 +19,9 @@ import {
   type WidgetSettings,
 } from "../widget";
 // The storefront block's own stylesheet, so the preview is the real thing.
-import widgetCss from "../../extensions/notify-me/assets/notify-me.css?url";
-
-export const links: LinksFunction = () => [{ rel: "stylesheet", href: widgetCss }];
+// Inlined via the loader: in dev the Shopify CLI proxy owns /extensions/*,
+// so linking the file by URL 404s and the preview renders unstyled.
+import widgetCss from "../../extensions/notify-me/assets/notify-me.css?raw";
 
 const INSTALLATION_QUERY = `#graphql
   query notifyMeWidget($namespace: String!, $key: String!) {
@@ -36,7 +35,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
   const res = await admin.graphql(INSTALLATION_QUERY, { variables: METAFIELD });
   const { data } = await res.json();
-  return { settings: sanitize(data?.currentAppInstallation?.metafield?.jsonValue) };
+  return {
+    settings: sanitize(data?.currentAppInstallation?.metafield?.jsonValue),
+    widgetCss,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -154,10 +156,11 @@ export default function WidgetPage() {
         Save
       </s-button>
 
+      <style>{data.widgetCss}</style>
       <style>{LAYOUT_CSS}</style>
       <div className="nm-layout">
         <s-stack direction="block" gap="base">
-          <s-section heading="Button">
+          <s-section heading="Product page button">
             <s-stack direction="block" gap="base">
               {text("buttonText", "Button text")}
               <s-grid gridTemplateColumns="1fr 1fr 1fr" gap="base">
@@ -226,7 +229,7 @@ export default function WidgetPage() {
                 {text("variantLabel", "Variant field label")}
                 {text("emailLabel", "Email field label")}
                 {text("placeholder", "Email placeholder")}
-                {text("submitText", "Button text")}
+                {text("submitText", "Submit button text")}
               </s-grid>
               {text("finePrint", "Fine print", "Leave empty to hide.")}
               <s-url-field
@@ -239,14 +242,14 @@ export default function WidgetPage() {
             </s-stack>
           </s-section>
 
-          <s-section heading="Messages">
+          <s-section heading="After signing up">
             <s-stack direction="block" gap="base">
-              {text("successHeading", "After signing up", "Also shown on the button once the shopper has joined.")}
-              {text("successDetail", "Detail after signing up")}
-              {text("doneText", "Close button after signing up")}
+              {text("successHeading", "Heading", "Also shown on the product page button once the shopper has joined.")}
+              {text("successDetail", "Message")}
+              {text("doneText", "Close button text")}
               <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                {text("invalidText", "Invalid email")}
-                {text("errorText", "Something went wrong")}
+                {text("invalidText", "Error: invalid email")}
+                {text("errorText", "Error: signup failed")}
               </s-grid>
             </s-stack>
           </s-section>
@@ -286,6 +289,7 @@ function Preview({ s, view }: { s: WidgetSettings; view: View }) {
   const vars = styleVars(s) as React.CSSProperties;
   return (
     <div className="nm-stage">
+      <p className="nm-caption">Product page</p>
       <div className="nm-product">
         <div className="nm-bar" style={{ width: "70%" }} />
         <div className="nm-bar" style={{ width: "30%" }} />
@@ -299,6 +303,7 @@ function Preview({ s, view }: { s: WidgetSettings; view: View }) {
         <div className="nm-bar" style={{ width: "60%" }} />
       </div>
 
+      <p className="nm-caption">Popup after clicking the button</p>
       <div className="nm-backdrop">
         <div className="notify-me" style={{ ...vars, margin: 0 }}>
           <div className="notify-me__dialog nm-dialog">
@@ -367,6 +372,7 @@ const LAYOUT_CSS = `
     .nm-sticky { position: static; }
   }
   .nm-stage { border-radius: 12px; overflow: hidden; border: 1px solid #e3e3e3; background: #fff; color: #1f1c17; }
+  .nm-caption { margin: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #616161; background: #f7f7f7; border-bottom: 1px solid #e3e3e3; }
   .nm-product { padding: 20px 20px 16px; }
   .nm-bar { height: 10px; margin: 8px 0; border-radius: 5px; background: #ececec; }
   .nm-soldout { margin-top: 16px; padding: 12px; border-radius: 6px; text-align: center; font-size: 13px; color: #8a8a8a; background: #f1f1f1; }
