@@ -45,7 +45,8 @@ export default defineConfig({
     hmr: hmrConfig,
     fs: {
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
-      allow: ["app", "node_modules"],
+      // The widget design preview imports the storefront block's stylesheet.
+      allow: ["app", "node_modules", "extensions/notify-me/assets"],
     },
   },
   plugins: [
