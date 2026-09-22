@@ -24,11 +24,8 @@ const remember = (variantId) => {
 
 const showJoined = (root) => {
   const trigger = root.querySelector("[data-notify-me-trigger]");
-  const form = root.querySelector("[data-notify-me-form]");
   trigger.textContent = root.dataset.successText || "You're on the list";
   trigger.disabled = true;
-  trigger.hidden = false;
-  form.hidden = true;
 };
 
 const setMessage = (form, tone, text) => {
@@ -38,16 +35,29 @@ const setMessage = (form, tone, text) => {
   message.textContent = text;
 };
 
-// The form starts collapsed behind a compact trigger so the sold-out state
-// doesn't claim the email field's height until the shopper asks for it.
+// The form lives in a native <dialog>: showModal() gives focus trapping,
+// Escape to close and the top layer for free. Each open starts on a fresh form
+// preselected to the variant the shopper is looking at.
+const openDialog = (root) => {
+  const dialog = root.querySelector("[data-notify-me-dialog]");
+  const form = root.querySelector("[data-notify-me-form]");
+  const select = root.querySelector("[data-notify-me-variant]");
+  if (select) select.value = root.dataset.variantId;
+  form.hidden = false;
+  root.querySelector("[data-notify-me-success]").hidden = true;
+  setMessage(form, "", "");
+  dialog.showModal();
+};
+
 document.addEventListener("click", (event) => {
   const trigger = event.target.closest("[data-notify-me-trigger]");
-  if (!trigger) return;
-  const root = trigger.closest("[data-notify-me]");
-  const form = root.querySelector("[data-notify-me-form]");
-  trigger.hidden = true;
-  form.hidden = false;
-  form.querySelector("input[name=email]").focus();
+  if (trigger) return openDialog(trigger.closest("[data-notify-me]"));
+
+  // The close buttons, or a click on the backdrop (the dialog element itself,
+  // since the panel fills everything inside it).
+  const dialog = event.target.closest("[data-notify-me-close]")?.closest("dialog") ||
+    (event.target.matches("[data-notify-me-dialog]") && event.target);
+  if (dialog) dialog.close();
 });
 
 // Posts the waitlist signup through the app proxy so the request is signed by Shopify.
@@ -60,6 +70,7 @@ document.addEventListener("submit", async (event) => {
   const button = form.querySelector("[data-notify-me-button]");
   const input = form.querySelector("input[name=email]");
   const email = input.value.trim();
+  const variantId = form.querySelector("[data-notify-me-variant]")?.value || root.dataset.variantId;
   const errorText = root.dataset.errorText || "Something went wrong. Try again.";
 
   // Checked here as well as server-side so the shopper gets an instant answer.
@@ -78,7 +89,7 @@ document.addEventListener("submit", async (event) => {
   try {
     const body = new FormData(form);
     body.set("email", email);
-    body.set("variantId", root.dataset.variantId);
+    body.set("variantId", variantId);
     body.set("productId", root.dataset.productId);
 
     const response = await fetch(`${root.dataset.proxy}/subscribe`, {
@@ -89,8 +100,13 @@ document.addEventListener("submit", async (event) => {
 
     if (response.ok) {
       form.reset();
-      remember(root.dataset.variantId);
-      showJoined(root);
+      remember(variantId);
+      // The popup's picker can sign up for a different variant than the page shows.
+      if (variantId === root.dataset.variantId) showJoined(root);
+      const success = root.querySelector("[data-notify-me-success]");
+      form.hidden = true;
+      success.hidden = false;
+      success.querySelector("button").focus();
     } else {
       setMessage(form, "error", data.error || errorText);
     }
@@ -111,8 +127,8 @@ document.addEventListener("input", (event) => {
 });
 
 // Themes re-render the product form on variant change; keep the stored variant
-// in sync, show the form only while the chosen variant is sold out, and reopen
-// it so the shopper can sign up for the new variant.
+// in sync, show the trigger only while the chosen variant is sold out, and
+// reset it so the shopper can sign up for the new variant.
 const soldOutVariants = (root) =>
   new Set(
     (root.dataset.variantAvailability || "")
@@ -132,12 +148,8 @@ const syncVariant = (root, variantId) => {
   }
 
   const trigger = root.querySelector("[data-notify-me-trigger]");
-  const form = root.querySelector("[data-notify-me-form]");
   trigger.textContent = trigger.dataset.defaultText;
   trigger.disabled = false;
-  trigger.hidden = false;
-  form.hidden = true;
-  setMessage(form, "", "");
 };
 
 const urlVariant = () => new URLSearchParams(location.search).get("variant");

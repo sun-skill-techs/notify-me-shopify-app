@@ -1,10 +1,10 @@
 {% comment %}
   Renders on any product that has a sold-out variant, and hides itself via
   [hidden] when the selected variant is in stock. The availability of every
-  variant is passed to the JS so switching variants toggles the form without a
-  page load. Starts collapsed behind a trigger button; the form only takes up
-  space once the shopper clicks it. Inherits theme typography; merchants
-  control the copy and surface style from the theme editor.
+  variant is passed to the JS so switching variants toggles the block without a
+  page load. The inline footprint is a single trigger button; the signup form
+  lives in a native <dialog> that opens as a popup. Inherits theme typography;
+  merchants control the copy and popup colors from the theme editor.
 {% endcomment %}
 
 {% assign sold_out_count = product.variants | where: "available", false | size %}
@@ -15,7 +15,7 @@
     {%- endfor -%}
   {% endcapture %}
   <div
-    class="notify-me notify-me--{{ block.settings.style }}"
+    class="notify-me"
     data-notify-me
     data-product-id="{{ product.id }}"
     data-variant-id="{{ product.selected_or_first_available_variant.id }}"
@@ -24,7 +24,7 @@
     data-success-text="{{ block.settings.success_text | escape }}"
     data-invalid-text="{{ block.settings.invalid_text | escape }}"
     data-error-text="{{ block.settings.error_text | escape }}"
-    style="--notify-me-radius: {{ block.settings.corner_radius }}px;"
+    style="--notify-me-radius: {{ block.settings.corner_radius }}px; --notify-me-bg: {{ block.settings.popup_background }}; --notify-me-fg: {{ block.settings.popup_text }};"
     {% if product.selected_or_first_available_variant.available %}hidden{% endif %}
   >
     <button
@@ -32,70 +32,120 @@
       class="notify-me__trigger"
       data-notify-me-trigger
       data-default-text="{{ block.settings.trigger_text }}"
+      aria-haspopup="dialog"
     >
       {{ block.settings.trigger_text }}
     </button>
 
-    <form data-notify-me-form novalidate hidden>
-      {% if block.settings.eyebrow != blank %}
-        <p class="notify-me__eyebrow">{{ block.settings.eyebrow }}</p>
-      {% endif %}
-      <div class="notify-me__header">
-        {% if block.settings.show_icon %}
-          <span class="notify-me__icon" aria-hidden="true">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2.5 5.5h15v10h-15z"></path>
-              <path d="m2.5 6 7.5 5.5L17.5 6"></path>
-            </svg>
-          </span>
-        {% endif %}
-        <div class="notify-me__heading-group">
-          <label class="notify-me__label" for="notify-me-email-{{ block.id }}">
-            {{ block.settings.heading }}
-          </label>
+    <dialog
+      class="notify-me__dialog"
+      data-notify-me-dialog
+      aria-labelledby="notify-me-title-{{ block.id }}"
+    >
+      <div class="notify-me__panel">
+        <button type="button" class="notify-me__close" data-notify-me-close aria-label="Close">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="m5 5 10 10M15 5 5 15"></path>
+          </svg>
+        </button>
+
+        <div class="notify-me__product">
+          {% if product.featured_image %}
+            {{
+              product.featured_image
+              | image_url: width: 160
+              | image_tag: class: 'notify-me__thumb', alt: '', loading: 'lazy', width: 80, height: 80
+            }}
+          {% endif %}
+          <div class="notify-me__product-text">
+            {% if block.settings.eyebrow != blank %}
+              <p class="notify-me__eyebrow">{{ block.settings.eyebrow }}</p>
+            {% endif %}
+            <p class="notify-me__product-title">{{ product.title }}</p>
+          </div>
+        </div>
+
+        <form data-notify-me-form novalidate>
+          <h2 class="notify-me__heading" id="notify-me-title-{{ block.id }}">{{ block.settings.heading }}</h2>
           {% if block.settings.subheading != blank %}
             <p class="notify-me__subheading">{{ block.settings.subheading }}</p>
           {% endif %}
+
+          {%- comment -%} Honeypot: hidden from people, filled by bots, rejected server-side. {%- endcomment -%}
+          <input class="notify-me__hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+          {%- comment -%}
+            Several sold-out variants: let the shopper pick one here without
+            closing the popup. One sold-out variant: just name it.
+          {%- endcomment -%}
+          {% unless product.has_only_default_variant %}
+            {% if sold_out_count > 1 %}
+              <div class="notify-me__group">
+                <label class="notify-me__label" for="notify-me-variant-{{ block.id }}">{{ block.settings.variant_label }}</label>
+                <div class="notify-me__select-wrap">
+                  <select id="notify-me-variant-{{ block.id }}" class="notify-me__control notify-me__select" data-notify-me-variant>
+                    {% for variant in product.variants %}
+                      {% unless variant.available %}
+                        <option value="{{ variant.id }}">{{ variant.title }}</option>
+                      {% endunless %}
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            {% else %}
+              {% assign sold_out_variant = product.variants | where: "available", false | first %}
+              <p class="notify-me__variant-name">{{ sold_out_variant.title }}</p>
+            {% endif %}
+          {% endunless %}
+
+          <div class="notify-me__group">
+            <label class="notify-me__label" for="notify-me-email-{{ block.id }}">{{ block.settings.email_label }}</label>
+            <input
+              id="notify-me-email-{{ block.id }}"
+              class="notify-me__control"
+              type="email"
+              name="email"
+              required
+              autofocus
+              autocomplete="email"
+              placeholder="{{ block.settings.placeholder }}"
+              aria-describedby="notify-me-message-{{ block.id }}"
+            >
+          </div>
+
+          <p
+            id="notify-me-message-{{ block.id }}"
+            class="notify-me__message"
+            data-notify-me-message
+            role="status"
+            aria-live="polite"
+          ></p>
+
+          <button class="notify-me__button" type="submit" data-notify-me-button>
+            <span class="notify-me__button-label">{{ block.settings.button_text }}</span>
+            <span class="notify-me__spinner" aria-hidden="true"></span>
+          </button>
+
+          <p class="notify-me__fine-print">
+            {{ block.settings.fine_print }}
+            {% if block.settings.privacy_url != blank %}
+              <a class="notify-me__link" href="{{ block.settings.privacy_url }}" target="_blank" rel="noopener">Privacy policy</a>
+            {% endif %}
+          </p>
+        </form>
+
+        <div class="notify-me__success" data-notify-me-success hidden>
+          <span class="notify-me__check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 12.5 4 4 8-9"></path>
+            </svg>
+          </span>
+          <p class="notify-me__heading">{{ block.settings.success_text }}</p>
+          <p class="notify-me__subheading">{{ block.settings.success_detail }}</p>
+          <button type="button" class="notify-me__button" data-notify-me-close>{{ block.settings.done_text }}</button>
         </div>
       </div>
-
-      {%- comment -%} Honeypot: hidden from people, filled by bots, rejected server-side. {%- endcomment -%}
-      <input class="notify-me__hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-
-      <div class="notify-me__row">
-        <div class="notify-me__field">
-          <input
-            id="notify-me-email-{{ block.id }}"
-            class="notify-me__input"
-            type="email"
-            name="email"
-            required
-            autocomplete="email"
-            placeholder="{{ block.settings.placeholder }}"
-            aria-describedby="notify-me-message-{{ block.id }}"
-          >
-        </div>
-        <button class="notify-me__button" type="submit" data-notify-me-button>
-          <span class="notify-me__button-label">{{ block.settings.button_text }}</span>
-          <span class="notify-me__spinner" aria-hidden="true"></span>
-        </button>
-      </div>
-
-      <p class="notify-me__fine-print">
-        {{ block.settings.fine_print }}
-        {% if block.settings.privacy_url != blank %}
-          <a class="notify-me__link" href="{{ block.settings.privacy_url }}" target="_blank" rel="noopener">Privacy policy</a>
-        {% endif %}
-      </p>
-
-      <p
-        id="notify-me-message-{{ block.id }}"
-        class="notify-me__message"
-        data-notify-me-message
-        role="status"
-        aria-live="polite"
-      ></p>
-    </form>
+    </dialog>
   </div>
 {% endif %}
 
@@ -108,15 +158,19 @@
   "settings": [
     {
       "type": "text",
-      "id": "eyebrow",
-      "label": "Eyebrow label",
-      "default": "Restock notice"
-    },
-    {
-      "type": "text",
       "id": "trigger_text",
       "label": "Trigger button text",
       "default": "Notify me when available"
+    },
+    {
+      "type": "header",
+      "content": "Popup"
+    },
+    {
+      "type": "text",
+      "id": "eyebrow",
+      "label": "Eyebrow label",
+      "default": "Restock notice"
     },
     {
       "type": "text",
@@ -132,15 +186,27 @@
     },
     {
       "type": "text",
-      "id": "button_text",
-      "label": "Button text",
-      "default": "Notify me"
+      "id": "variant_label",
+      "label": "Variant label",
+      "default": "Option"
+    },
+    {
+      "type": "text",
+      "id": "email_label",
+      "label": "Email label",
+      "default": "Email address"
     },
     {
       "type": "text",
       "id": "placeholder",
       "label": "Email placeholder",
       "default": "you@example.com"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button text",
+      "default": "Notify me"
     },
     {
       "type": "text",
@@ -165,6 +231,18 @@
     },
     {
       "type": "text",
+      "id": "success_detail",
+      "label": "Detail after signing up",
+      "default": "We'll send one email the moment it's back in stock."
+    },
+    {
+      "type": "text",
+      "id": "done_text",
+      "label": "Close button after signing up",
+      "default": "Done"
+    },
+    {
+      "type": "text",
       "id": "invalid_text",
       "label": "Invalid email",
       "default": "Enter a valid email address."
@@ -180,21 +258,16 @@
       "content": "Appearance"
     },
     {
-      "type": "select",
-      "id": "style",
-      "label": "Style",
-      "options": [
-        { "value": "card", "label": "Card" },
-        { "value": "outlined", "label": "Outlined" },
-        { "value": "plain", "label": "Plain" }
-      ],
-      "default": "card"
+      "type": "color",
+      "id": "popup_background",
+      "label": "Popup background",
+      "default": "#fbfaf7"
     },
     {
-      "type": "checkbox",
-      "id": "show_icon",
-      "label": "Show icon",
-      "default": true
+      "type": "color",
+      "id": "popup_text",
+      "label": "Popup text",
+      "default": "#1f1c17"
     },
     {
       "type": "range",
