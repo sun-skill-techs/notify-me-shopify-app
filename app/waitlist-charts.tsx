@@ -191,6 +191,40 @@ export function TrendChart({ days }: { days: Day[] }) {
   );
 }
 
+/** A headline number for the selected period, compared with the one before.
+ * `note` replaces the comparison line when there is nothing to compare. */
+export function Stat({
+  label,
+  value,
+  previous,
+  days,
+  note,
+}: {
+  label: string;
+  value: number | string;
+  previous?: number;
+  days?: number;
+  note?: string;
+}) {
+  const change = previous === undefined || typeof value !== "number" ? null : value - previous;
+  return (
+    <s-box padding="base" background="subdued" borderRadius="base">
+      <s-stack direction="block" gap="small-200">
+        <s-text color="subdued">{label}</s-text>
+        <span className="wl-stat-value">{value.toLocaleString()}</span>
+        <s-text color="subdued">
+          {note ??
+            (change === null
+              ? "Across all variants"
+              : change === 0
+                ? `Same as previous ${days} days`
+                : `${change > 0 ? "↑" : "↓"} ${Math.abs(change).toLocaleString()} vs previous ${days} days`)}
+        </s-text>
+      </s-stack>
+    </s-box>
+  );
+}
+
 export type Slice = { key: string; label: string; value: number; color: string };
 
 /** Share of every signup by status: one stacked bar, with the list as its legend. */

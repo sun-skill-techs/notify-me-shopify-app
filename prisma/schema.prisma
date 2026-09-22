@@ -55,5 +55,6 @@ model ShopSettings {
   emailSubject String  @default("{{product}} is back in stock")
   fromName    String   @default("")
   testSentAt  DateTime?
+  setupDismissedAt DateTime?
   updatedAt   DateTime @updatedAt
 }
