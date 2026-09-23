@@ -78,23 +78,52 @@ function escapeHtml(s: string) {
   );
 }
 
-async function sender(shop: string, productTitle: string) {
+// A display name goes inside a quoted-string, so it can't carry the characters
+// that end one (or a header). "Smith, Jones & Co" is valid only once quoted.
+export function fromHeader(name: string, address: string) {
+  const clean = name.replace(/["<>\\\r\n]/g, "").trim();
+  return clean ? `"${clean}" <${address}>` : address;
+}
+
+/** What the email needs from the store itself: its name, and where shopper replies go. */
+export type ShopInfo = { shopName: string; shopContactEmail: string | null };
+
+async function sender(shop: string, info: ShopInfo, productTitle: string) {
   const settings = await db.shopSettings.findUnique({ where: { shop } });
   const subject = (settings?.emailSubject || "{{product}} is back in stock").replace(
     "{{product}}",
     productTitle,
   );
   const from = process.env.RESEND_FROM || "onboarding@resend.dev";
-  const fromHeader = settings?.fromName ? `${settings.fromName} <${from}>` : from;
-  const storeName = settings?.fromName || shop.replace(/\.myshopify\.com$/, "");
-  return { resend: new Resend(process.env.RESEND_API_KEY), subject, fromHeader, storeName };
+  const storeName =
+    settings?.fromName || info.shopName || shop.replace(/\.myshopify\.com$/, "");
+  return {
+    resend: new Resend(process.env.RESEND_API_KEY),
+    subject,
+    fromHeader: fromHeader(storeName, from),
+    // Shoppers reply to the store, not to the app's shared sending address.
+    replyTo: info.shopContactEmail || undefined,
+    storeName,
+  };
 }
+
+// A row whose sender died mid-send (a redeploy during a restock) would sit in
+// SENDING forever. After this long it's claimable again. If the crash came
+// after Resend accepted the email, that shopper gets it twice, which beats never.
+const STALE_SENDING_MS = 10 * 60 * 1000;
+const claimable = () => ({
+  OR: [
+    { status: "PENDING" },
+    { status: "SENDING", claimedAt: null },
+    { status: "SENDING", claimedAt: { lt: new Date(Date.now() - STALE_SENDING_MS) } },
+  ],
+});
 
 /**
  * Email every pending subscriber for a variant and mark each row SENT or FAILED.
  * Caller has already confirmed the variant is actually available.
  */
-export async function notifyVariant(opts: {
+export async function notifyVariant(opts: ShopInfo & {
   shop: string;
   variantId: string;
   productTitle: string;
@@ -105,12 +134,16 @@ export async function notifyVariant(opts: {
   const { shop, variantId } = opts;
 
   const pending = await db.restockSubscription.findMany({
-    where: { shop, variantId, status: "PENDING" },
+    where: { shop, variantId, ...claimable() },
     select: { id: true, email: true },
   });
   if (pending.length === 0) return { sent: 0, failed: 0 };
 
-  const { resend, subject, fromHeader, storeName } = await sender(shop, opts.productTitle);
+  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+    shop,
+    opts,
+    opts.productTitle,
+  );
 
   let sent = 0;
   let failed = 0;
@@ -120,8 +153,8 @@ export async function notifyVariant(opts: {
     // Shopify retries webhooks, so two handlers can race on the same variant.
     // Claiming the row first means only one of them ever emails this shopper.
     const { count } = await db.restockSubscription.updateMany({
-      where: { id: sub.id, status: "PENDING" },
-      data: { status: "SENDING" },
+      where: { id: sub.id, ...claimable() },
+      data: { status: "SENDING", claimedAt: new Date() },
     });
     if (count === 0) continue;
 
@@ -129,8 +162,13 @@ export async function notifyVariant(opts: {
     const { error } = await resend.emails.send({
       from: fromHeader,
       to: [sub.email],
+      replyTo,
       subject,
-      headers: { "List-Unsubscribe": `<${unsub}>` },
+      // One-click (RFC 8058): Gmail and Yahoo POST to the link; proxy.unsubscribe handles it.
+      headers: {
+        "List-Unsubscribe": `<${unsub}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      },
       html: renderEmail({
         productTitle: opts.productTitle,
         variantTitle: opts.variantTitle,
@@ -161,11 +199,16 @@ export async function notifyVariant(opts: {
 }
 
 /** Send a sample restock email so the merchant can check delivery and branding. */
-export async function sendTestEmail(shop: string, to: string) {
-  const { resend, subject, fromHeader, storeName } = await sender(shop, "Sample product");
+export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
+  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+    shop,
+    info,
+    "Sample product",
+  );
   const { error } = await resend.emails.send({
     from: fromHeader,
     to: [to],
+    replyTo,
     subject: `[Test] ${subject}`,
     html: renderEmail({
       productTitle: "Sample product",
@@ -187,12 +230,13 @@ export async function buyableVariant(
   const response = await admin.graphql(
     `#graphql
       query notifyMeVariant($id: ID!) {
+        shop { name contactEmail }
         productVariant(id: $id) {
           id
           title
           availableForSale
-          image { url }
-          product { title onlineStoreUrl featuredImage { url } }
+          media(first: 1) { nodes { preview { image { url } } } }
+          product { title onlineStoreUrl featuredMedia { preview { image { url } } } }
         }
       }`,
     { variables: { id: variantGid } },
@@ -207,6 +251,29 @@ export async function buyableVariant(
     productTitle: v.product.title as string,
     variantTitle: v.title === "Default Title" ? "" : (v.title as string),
     productUrl: `${v.product.onlineStoreUrl}?variant=${variantId}`,
-    imageUrl: (v.image?.url ?? v.product.featuredImage?.url ?? null) as string | null,
+    imageUrl: (v.media?.nodes?.[0]?.preview?.image?.url ??
+      v.product.featuredMedia?.preview?.image?.url ??
+      null) as string | null,
+    shopName: (data.shop?.name ?? "") as string,
+    shopContactEmail: (data.shop?.contactEmail ?? null) as string | null,
   };
+}
+
+/**
+ * customers/data_request: email the merchant every record held for that shopper,
+ * so they can pass it on. Returns an error message, or null once sent.
+ */
+export async function sendDataRequest(to: string, shop: string, customerEmail: string, rows: unknown[]) {
+  const { error } = await new Resend(process.env.RESEND_API_KEY).emails.send({
+    from: process.env.RESEND_FROM || "onboarding@resend.dev",
+    to: [to],
+    subject: `Customer data request: ${customerEmail}`,
+    text: `Shopify sent a data request for ${customerEmail} on ${shop}.
+
+These are all the restock-alert records stored for that address. Forward them to the customer to complete the request.
+
+${JSON.stringify(rows, null, 2)}
+`,
+  });
+  return error ? error.message : null;
 }

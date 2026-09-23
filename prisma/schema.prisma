@@ -42,6 +42,8 @@ model RestockSubscription {
   status         String    @default("PENDING")
   createdAt      DateTime  @default(now())
   sentAt         DateTime?
+  // When a sender claimed the row (status SENDING); lets a stale claim be retried.
+  claimedAt      DateTime?
   unsubscribedAt DateTime?
 
   // One live request per shopper per variant; re-subscribing after a send reuses the row.
@@ -51,7 +53,6 @@ model RestockSubscription {
 
 model ShopSettings {
   shop        String   @id
-  buttonText  String   @default("Notify me when available")
   emailSubject String  @default("{{product}} is back in stock")
   fromName    String   @default("")
   testSentAt  DateTime?

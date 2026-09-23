@@ -18,7 +18,8 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <s-link href="/app">Home</s-link>
+        {/* @ts-expect-error rel is App Bridge's (hides the duplicate Home link); polaris-types lacks it */}
+        <s-link href="/app" rel="home">Home</s-link>
         <s-link href="/app/waitlist">Waitlist</s-link>
         <s-link href="/app/widget">Widget design</s-link>
         <s-link href="/app/settings">Email settings</s-link>

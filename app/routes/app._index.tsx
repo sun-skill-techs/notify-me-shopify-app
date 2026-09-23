@@ -256,9 +256,13 @@ export default function Index() {
   const deliveryRate = attempted ? `${Math.round((sent / attempted) * 100)}%` : "—";
 
   return (
-    <s-page heading="Notify Me">
+    <s-page heading="BackSoon">
       <s-button slot="primary-action" href="/app/waitlist" variant="primary">
         View waitlist
+      </s-button>
+      {/* Stays after the setup guide is dismissed, so the block can always be re-added. */}
+      <s-button slot="secondary-actions" href={themeEditorUrl} target="_blank">
+        Add to theme
       </s-button>
       <s-button slot="secondary-actions" href="/app/settings">
         Email settings

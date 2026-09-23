@@ -23,7 +23,11 @@
 -%}
 
 {% assign sold_out_count = product.variants | where: "available", false | size %}
-{% if sold_out_count > 0 %}
+{%- comment -%}
+  In the theme editor it always renders, so a merchant placing the block on an
+  in-stock product sees what they added instead of an empty slot.
+{%- endcomment -%}
+{% if sold_out_count > 0 or request.design_mode %}
   {% capture variant_availability %}
     {%- for variant in product.variants -%}
       {{- variant.id }}:{% if variant.available %}1{% else %}0{% endif %}{% unless forloop.last %},{% endunless -%}
@@ -35,12 +39,12 @@
     data-product-id="{{ product.id }}"
     data-variant-id="{{ product.selected_or_first_available_variant.id }}"
     data-variant-availability="{{ variant_availability | strip }}"
-    data-proxy="{{ shop.url }}/apps/notify-me"
+    data-proxy="/apps/notify-me"
     data-success-text="{{ w.successHeading | default: "You're on the list" | escape }}"
     data-invalid-text="{{ w.invalidText | default: 'Enter a valid email address.' | escape }}"
     data-error-text="{{ w.errorText | default: 'Something went wrong. Try again.' | escape }}"
     style="{{ w.style | escape }}"
-    {% if product.selected_or_first_available_variant.available %}hidden{% endif %}
+    {% if product.selected_or_first_available_variant.available %}{% unless request.design_mode %}hidden{% endunless %}{% endif %}
   >
     <button
       type="button"
@@ -76,7 +80,7 @@
             {% if eyebrow != blank %}
               <p class="notify-me__eyebrow">{{ eyebrow | escape }}</p>
             {% endif %}
-            <p class="notify-me__product-title">{{ product.title }}</p>
+            <p class="notify-me__product-title">{{ product.title | escape }}</p>
           </div>
         </div>
 
@@ -101,7 +105,7 @@
                   <select id="notify-me-variant-{{ block.id }}" class="notify-me__control notify-me__select" data-notify-me-variant>
                     {% for variant in product.variants %}
                       {% unless variant.available %}
-                        <option value="{{ variant.id }}">{{ variant.title }}</option>
+                        <option value="{{ variant.id }}">{{ variant.title | escape }}</option>
                       {% endunless %}
                     {% endfor %}
                   </select>
@@ -109,7 +113,7 @@
               </div>
             {% else %}
               {% assign sold_out_variant = product.variants | where: "available", false | first %}
-              <p class="notify-me__variant-name">{{ sold_out_variant.title }}</p>
+              <p class="notify-me__variant-name">{{ sold_out_variant.title | escape }}</p>
             {% endif %}
           {% endunless %}
 
@@ -173,7 +177,7 @@
   "settings": [
     {
       "type": "paragraph",
-      "content": "Customize the button and popup in the Notify Me app, under Widget design."
+      "content": "Customize the button and popup in the BackSoon app, under Widget design."
     }
   ]
 }

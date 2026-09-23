@@ -140,7 +140,8 @@ const soldOutVariants = (root) =>
 const syncVariant = (root, variantId) => {
   if (!variantId) return;
   root.dataset.variantId = variantId;
-  root.hidden = !soldOutVariants(root).has(String(variantId));
+  // The theme editor always shows the block (see the Liquid) so merchants can see it.
+  root.hidden = !window.Shopify?.designMode && !soldOutVariants(root).has(String(variantId));
 
   if (joined().has(String(variantId))) {
     showJoined(root);

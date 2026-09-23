@@ -80,8 +80,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             ... on ProductVariant {
               id
               title
-              image { url }
-              product { title featuredImage { url } }
+              media(first: 1) { nodes { preview { image { url } } } }
+              product { title featuredMedia { preview { image { url } } } }
             }
           }
         }`,
@@ -98,7 +98,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       if (target) {
         target.product = node.product?.title ?? "Product";
         target.variant = node.title === "Default Title" ? "" : (node.title ?? "");
-        target.image = node.image?.url ?? node.product?.featuredImage?.url ?? null;
+        target.image =
+          node.media?.nodes?.[0]?.preview?.image?.url ??
+          node.product?.featuredMedia?.preview?.image?.url ??
+          null;
       }
     }
   }

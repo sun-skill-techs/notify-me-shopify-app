@@ -17,7 +17,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [settings, shopRes] = await Promise.all([
     db.shopSettings.findUnique({ where: { shop: session.shop } }),
     admin.graphql(`#graphql
-      query notifyMeShop { shop { name email } }`),
+      query notifyMeShop { shop { name email contactEmail } }`),
   ]);
   const { data } = await shopRes.json();
 
@@ -27,12 +27,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     testSentAt: settings?.testSentAt?.toISOString() ?? null,
     shopName: (data?.shop?.name as string) ?? "",
     shopEmail: (data?.shop?.email as string) ?? "",
+    replyTo: (data?.shop?.contactEmail as string) ?? "",
     fromAddress: process.env.RESEND_FROM || "onboarding@resend.dev",
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const form = await request.formData();
   const intent = form.get("intent");
@@ -55,7 +56,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
       return { ok: false, message: "Enter a valid email address." };
     }
-    const error = await sendTestEmail(shop, to);
+    const shopRes = await admin.graphql(`#graphql
+      query notifyMeTestShop { shop { name contactEmail } }`);
+    const { data } = await shopRes.json();
+    const error = await sendTestEmail(
+      shop,
+      { shopName: data?.shop?.name ?? "", shopContactEmail: data?.shop?.contactEmail ?? null },
+      to,
+    );
     if (error) return { ok: false, message: `Could not send: ${error}` };
     await db.shopSettings.upsert({
       where: { shop },
@@ -95,9 +103,9 @@ export default function SettingsPage() {
     fetcher.submit({ intent: "test", to: testTo }, { method: "post" });
 
   const previewSubject = emailSubject.replace("{{product}}", "Linen shirt");
-  const previewFrom = fromName
-    ? `${fromName} <${data.fromAddress}>`
-    : data.fromAddress;
+  // With no sender name saved, emails use the store name (see sender() in notify.server).
+  const previewName = fromName || data.shopName;
+  const previewFrom = previewName ? `${previewName} <${data.fromAddress}>` : data.fromAddress;
 
   return (
     <s-page heading="Email settings">
@@ -184,7 +192,10 @@ export default function SettingsPage() {
 
       <s-section slot="aside" heading="Sending address">
         <s-text color="subdued">
-          Emails are sent from {data.fromAddress}. Replies go there too.
+          Emails are sent from {data.fromAddress}.{" "}
+          {data.replyTo
+            ? `Shopper replies go to your store's contact email, ${data.replyTo}.`
+            : "Add a contact email in Settings > Store details so shopper replies reach you."}
         </s-text>
       </s-section>
     </s-page>

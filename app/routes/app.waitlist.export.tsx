@@ -2,7 +2,12 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
-const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+// Excel and Sheets run a cell starting with = + - @ (or tab/CR) as a formula, and
+// shopper emails are storefront input. A leading ' keeps it as text.
+export const cell = (raw: string) => {
+  const v = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 
 // GET /app/waitlist/export -> CSV of every subscriber. Fetched from the waitlist
 // page with App Bridge's fetch so the session token comes along.
