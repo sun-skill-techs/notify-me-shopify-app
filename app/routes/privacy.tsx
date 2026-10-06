@@ -1,7 +1,7 @@
 // Public privacy policy, linked from the App Store listing and the app's root page.
 const DEVELOPER = "Sun Skill Tech";
 const CONTACT_EMAIL = "management.sunskilltechs@gmail.com";
-const UPDATED = "September 23, 2026";
+const UPDATED = "October 7, 2026";
 
 export default function Privacy() {
   return (
@@ -28,7 +28,8 @@ export default function Privacy() {
         (sender name, email subject, widget design) and the access token Shopify
         issues at install. The app reads product and variant details and the
         store&apos;s name and contact email through Shopify&apos;s API. It does not read
-        orders or the store&apos;s customer records.
+        orders. Its only use of the store&apos;s customer records is adding signup
+        emails to them, described below.
       </p>
 
       <h2>How we use it</h2>
@@ -37,13 +38,15 @@ export default function Privacy() {
         email they asked for, once, when that variant is back in stock. We never
         use it for marketing, never sell it, and never share it with other
         merchants. The merchant can see and export the waitlist for their own
-        store.
+        store. As Shopify requires, we also add the email address to that
+        store&apos;s Shopify customer list, tagged &quot;backsoon-waitlist&quot;. We
+        don&apos;t subscribe it to the store&apos;s marketing emails.
       </p>
 
       <h2>Who processes it</h2>
       <ul>
         <li>Resend sends the emails.</li>
-        <li>Railway hosts the app and its PostgreSQL database.</li>
+        <li>Hetzner hosts the app and its PostgreSQL database on a server in Germany.</li>
         <li>Shopify provides the store data and relays storefront signups to the app.</li>
       </ul>
 

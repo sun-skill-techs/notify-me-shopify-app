@@ -259,6 +259,47 @@ export async function buyableVariant(
   };
 }
 
+export const CUSTOMER_TAG = "backsoon-waitlist";
+
+/**
+ * App Store requirement 5.1.5: an email collected on the storefront goes into the
+ * store's own customer list. Tagged so the merchant can find waitlist signups.
+ * Marketing consent is left alone: a restock request isn't a marketing opt-in.
+ */
+export async function syncCustomer(
+  admin: { graphql: (q: string, o?: { variables: Record<string, unknown> }) => Promise<Response> },
+  email: string,
+) {
+  const found = await admin.graphql(
+    `#graphql
+      query backSoonCustomer($email: String!) {
+        customerByIdentifier(identifier: { emailAddress: $email }) { id }
+      }`,
+    { variables: { email } },
+  );
+  const id = (await found.json()).data?.customerByIdentifier?.id;
+
+  // tagsAdd keeps the customer's existing tags; customerCreate's tags would replace them.
+  const res = id
+    ? await admin.graphql(
+        `#graphql
+          mutation backSoonTag($id: ID!, $tags: [String!]!) {
+            tagsAdd(id: $id, tags: $tags) { userErrors { field message } }
+          }`,
+        { variables: { id, tags: [CUSTOMER_TAG] } },
+      )
+    : await admin.graphql(
+        `#graphql
+          mutation backSoonCustomerCreate($input: CustomerInput!) {
+            customerCreate(input: $input) { userErrors { field message } }
+          }`,
+        { variables: { input: { email, tags: [CUSTOMER_TAG] } } },
+      );
+  const { data, errors } = await res.json();
+  const userErrors = errors ?? (id ? data?.tagsAdd : data?.customerCreate)?.userErrors;
+  if (userErrors?.length) throw new Error(JSON.stringify(userErrors));
+}
+
 /**
  * customers/data_request: email the merchant every record held for that shopper,
  * so they can pass it on. Returns an error message, or null once sent.

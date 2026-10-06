@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { syncCustomer } from "../notify.server";
 
 // ponytail: one cap per shop, not per visitor; Shopify's proxy doesn't pass a
 // client IP we can trust. It bounds how many strangers a scripted run can add to
@@ -10,7 +11,7 @@ const SIGNUPS_PER_HOUR = 500;
 // Shoppers POST here through the app proxy: /apps/notify-me/subscribe
 export const action = async ({ request }: ActionFunctionArgs) => {
   // Verifies Shopify's HMAC signature; throws a 401 Response if the request wasn't proxied.
-  const { session } = await authenticate.public.appProxy(request);
+  const { session, admin } = await authenticate.public.appProxy(request);
   const shop = session?.shop ?? new URL(request.url).searchParams.get("shop");
   if (!shop) return Response.json({ error: "Unknown shop" }, { status: 401 });
 
@@ -44,6 +45,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     create: { shop, variantId, productId, email },
     update: { status: "PENDING", sentAt: null, unsubscribedAt: null },
   });
+
+  // ponytail: fire-and-forget, so a slow Admin API doesn't hold up the shopper.
+  // A failed sync is only logged; the signup is already saved. Add a retry queue
+  // if the logs show these failing.
+  if (admin) {
+    void syncCustomer(admin, email).catch((e) =>
+      console.error("notify-me: customer sync failed", e),
+    );
+  }
 
   return Response.json({ ok: true });
 };

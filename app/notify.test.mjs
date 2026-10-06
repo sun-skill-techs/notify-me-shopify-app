@@ -48,7 +48,7 @@ globalThis.fetch = async (_url, init) => {
   });
 };
 
-const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant } = await import(
+const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer } = await import(
   "./notify.server.ts"
 );
 const { cell } = await import("./routes/app.waitlist.export.tsx");
@@ -112,4 +112,39 @@ rows = [
 assert.equal(await purgeOldRecords(), 4);
 assert.deepEqual(rows.map((r) => r.id), ["sent-new", "failed-recent-try", "pending-old"]);
 
-console.log("ok: notify.server, CSV export and retention");
+// Customer sync: a new email is created with the tag and no marketing consent;
+// a known one only gets the tag added, so its existing tags survive.
+const fakeAdmin = (existingId) => {
+  const calls = [];
+  return {
+    calls,
+    graphql: async (query, { variables }) => {
+      calls.push({ op: query.match(/(query|mutation) (\w+)/)[2], variables });
+      const data = query.includes("customerByIdentifier")
+        ? { customerByIdentifier: existingId ? { id: existingId } : null }
+        : { tagsAdd: { userErrors: [] }, customerCreate: { userErrors: [] } };
+      return Response.json({ data });
+    },
+  };
+};
+const fresh = fakeAdmin(null);
+await syncCustomer(fresh, "new@x.co");
+assert.deepEqual(fresh.calls[1], {
+  op: "backSoonCustomerCreate",
+  variables: { input: { email: "new@x.co", tags: ["backsoon-waitlist"] } },
+});
+const known = fakeAdmin("gid://shopify/Customer/1");
+await syncCustomer(known, "old@x.co");
+assert.deepEqual(known.calls[1], {
+  op: "backSoonTag",
+  variables: { id: "gid://shopify/Customer/1", tags: ["backsoon-waitlist"] },
+});
+await assert.rejects(
+  syncCustomer(
+    { graphql: async () => Response.json({ data: { customerByIdentifier: null, customerCreate: { userErrors: [{ message: "Email has already been taken" }] } } }) },
+    "race@x.co",
+  ),
+  /already been taken/,
+);
+
+console.log("ok: notify.server, CSV export, retention and customer sync");

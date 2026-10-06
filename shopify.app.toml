@@ -9,7 +9,8 @@ embedded = true
 [access_scopes]
 # read_products covers product/variant reads and the variants/in_stock webhook.
 # write_app_proxy is required to serve the storefront subscribe/unsubscribe endpoints.
-scopes = "read_products,write_app_proxy"
+# read_customers/write_customers copy signup emails into the store's customers (App Store 5.1.5).
+scopes = "read_customers,read_products,write_app_proxy,write_customers"
 
 [app_proxy]
 url = "https://backsoon.sunskilltech.com/proxy"
