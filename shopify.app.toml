@@ -3,7 +3,7 @@
 client_id = "ea7adf8906376c08ec1de8b1c3d09e5e"
 name = "BackSoon: Back in Stock Alerts"
 handle = "restock-alerts-sun-skill-techs"
-application_url = "https://back-in-stock-alerts-app-production.up.railway.app"
+application_url = "https://backsoon.sunskilltech.com"
 embedded = true
 
 [access_scopes]
@@ -12,7 +12,7 @@ embedded = true
 scopes = "read_products,write_app_proxy"
 
 [app_proxy]
-url = "https://back-in-stock-alerts-app-production.up.railway.app/proxy"
+url = "https://backsoon.sunskilltech.com/proxy"
 prefix = "apps"
 subpath = "notify-me"
 
@@ -45,7 +45,7 @@ api_version = "2026-07"
   compliance_topics = [ "shop/redact" ]
 
 [auth]
-redirect_urls = [ "https://back-in-stock-alerts-app-production.up.railway.app/auth/callback" ]
+redirect_urls = [ "https://backsoon.sunskilltech.com/auth/callback" ]
 
 [build]
 automatically_update_urls_on_dev = true
