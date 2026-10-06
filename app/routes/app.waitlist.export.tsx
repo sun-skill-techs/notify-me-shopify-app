@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { decryptEmail } from "../crypto.server";
 
 // Excel and Sheets run a cell starting with = + - @ (or tab/CR) as a formula, and
 // shopper emails are storefront input. A leading ' keeps it as text.
@@ -12,7 +13,7 @@ export const cell = (raw: string) => {
 // GET /app/waitlist/export -> CSV of every subscriber. Fetched from the waitlist
 // page with App Bridge's fetch so the session token comes along.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, sessionToken } = await authenticate.admin(request);
 
   const rows = await db.restockSubscription.findMany({
     where: { shop: session.shop },
@@ -27,11 +28,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   });
 
+  // The export is where staff see shopper emails, so each one is logged.
+  await db.dataAccessLog.create({
+    data: {
+      shop: session.shop,
+      action: "csv_export",
+      userId: sessionToken?.sub ?? null,
+      records: rows.length,
+    },
+  });
+
   const lines = [
     "email,product_id,variant_id,status,subscribed_at,notified_at",
     ...rows.map((r) =>
       [
-        r.email,
+        decryptEmail(r.email),
         r.productId,
         r.variantId,
         r.status,

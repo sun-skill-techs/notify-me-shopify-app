@@ -50,6 +50,14 @@ export default function Privacy() {
         <li>Shopify provides the store data and relays storefront signups to the app.</li>
       </ul>
 
+      <h2>How we protect it</h2>
+      <p>
+        All traffic uses HTTPS. Shopper email addresses are encrypted in our
+        database, backups are encrypted, and only our developer can reach the
+        production systems. Merchants&apos; terms for this processing are in
+        our <a href="/dpa">data processing terms</a>.
+      </p>
+
       <h2>How long we keep it</h2>
       <p>
         A waiting request stays until the item is back in stock and we send the
@@ -57,7 +65,8 @@ export default function Privacy() {
         180 days later. A shopper can unsubscribe from the link in any restock
         email. When Shopify tells us a shopper&apos;s data must be erased, we delete their records for that store.
         When a merchant uninstalls the app, we delete all of that store&apos;s data
-        48 hours later, when Shopify sends its shop deletion request.
+        48 hours later, when Shopify sends its shop deletion request. Encrypted
+        backups expire 14 days after that.
       </p>
 
       <h2>Your rights</h2>

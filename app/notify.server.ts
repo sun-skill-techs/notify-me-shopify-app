@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Resend } from "resend";
 import db from "./db.server";
+import { decryptEmail } from "./crypto.server";
 
 // Unsubscribe links are signed rather than stored: no extra token column, and the
 // link stays valid for the life of the row.
@@ -161,7 +162,7 @@ export async function notifyVariant(opts: ShopInfo & {
     const unsub = unsubscribeUrl(shop, sub.id);
     const { error } = await resend.emails.send({
       from: fromHeader,
-      to: [sub.email],
+      to: [decryptEmail(sub.email)],
       replyTo,
       subject,
       // One-click (RFC 8058): Gmail and Yahoo POST to the link; proxy.unsubscribe handles it.

@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { syncCustomer } from "../notify.server";
+import { emailHash, sealEmail } from "../crypto.server";
 
 // ponytail: one cap per shop, not per visitor; Shopify's proxy doesn't pass a
 // client IP we can trust. It bounds how many strangers a scripted run can add to
@@ -41,8 +42,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Re-subscribing after a previous notification resets the row to PENDING.
   await db.restockSubscription.upsert({
-    where: { shop_variantId_email: { shop, variantId, email } },
-    create: { shop, variantId, productId, email },
+    where: { shop_variantId_emailHash: { shop, variantId, emailHash: emailHash(email) } },
+    create: { shop, variantId, productId, ...sealEmail(email) },
     update: { status: "PENDING", sentAt: null, unsubscribedAt: null },
   });
 

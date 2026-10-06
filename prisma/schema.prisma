@@ -38,7 +38,11 @@ model RestockSubscription {
   shop           String
   productId      String
   variantId      String
+  // AES-256-GCM ciphertext (see app/crypto.server.ts), never the plain address.
   email          String
+  // Keyed HMAC of the lowercased address, for lookups and the unique constraint.
+  // Null only on rows saved before encryption, until the boot backfill runs.
+  emailHash      String?
   status         String    @default("PENDING")
   createdAt      DateTime  @default(now())
   sentAt         DateTime?
@@ -47,7 +51,7 @@ model RestockSubscription {
   unsubscribedAt DateTime?
 
   // One live request per shopper per variant; re-subscribing after a send reuses the row.
-  @@unique([shop, variantId, email])
+  @@unique([shop, variantId, emailHash])
   @@index([shop, variantId, status])
 }
 
@@ -58,4 +62,18 @@ model ShopSettings {
   testSentAt  DateTime?
   setupDismissedAt DateTime?
   updatedAt   DateTime @updatedAt
+}
+
+// Who read shopper emails, and how. Kept for a year (app/retention.server.ts).
+model DataAccessLog {
+  id        String   @id @default(cuid())
+  shop      String
+  // csv_export, data_request
+  action    String
+  // Shopify staff user ID from the session token, when a person did it.
+  userId    String?
+  records   Int
+  createdAt DateTime @default(now())
+
+  @@index([shop, createdAt])
 }

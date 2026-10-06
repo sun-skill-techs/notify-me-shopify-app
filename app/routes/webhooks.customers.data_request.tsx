@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendDataRequest } from "../notify.server";
+import { decryptEmail, emailHash } from "../crypto.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload, admin } = await authenticate.webhook(request);
@@ -10,7 +11,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const email = (payload as { customer?: { email?: string } }).customer?.email;
   const rows = email
     ? await db.restockSubscription.findMany({
-        where: { shop, email: email.toLowerCase() },
+        where: { shop, emailHash: emailHash(email) },
         select: {
           email: true,
           productId: true,
@@ -34,11 +35,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const to = data?.shop?.email as string | undefined;
   if (!to) return new Response();
 
-  const error = await sendDataRequest(to, shop, email, rows);
+  const error = await sendDataRequest(
+    to,
+    shop,
+    email,
+    rows.map((r) => ({ ...r, email: decryptEmail(r.email) })),
+  );
   if (error) {
     console.error("notify-me: data request email failed", error);
     // Shopify retries a failed delivery, which retries the email.
     return new Response(null, { status: 500 });
   }
+  await db.dataAccessLog.create({
+    data: { shop, action: "data_request", records: rows.length },
+  });
   return new Response();
 };

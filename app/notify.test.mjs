@@ -1,12 +1,13 @@
 // Run: npx vite-node app/notify.test.mjs
 // Exercises the real notify.server.ts with Prisma and the Resend API faked:
 // token signing, the From header, reply-to, stale-claim recovery, CSV escaping,
-// and the retention purge.
+// the retention purge, email encryption and the customer sync.
 import assert from "node:assert/strict";
 
 process.env.SHOPIFY_API_SECRET = "test-secret";
 process.env.RESEND_API_KEY = "re_test";
 process.env.RESEND_FROM = "alerts@example.com";
+process.env.DATA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 // The CSV route pulls in shopify.server, which won't load without these.
 process.env.SHOPIFY_APP_URL = "https://app.example.com";
 process.env.SHOPIFY_API_KEY = "test-key";
@@ -22,6 +23,7 @@ const matches = (row, where) =>
 globalThis.prismaGlobal = {
   session: { count: async () => 0 }, // shopify.server's session storage probes it at load
   shopSettings: { findUnique: async () => null },
+  dataAccessLog: { deleteMany: async () => ({ count: 0 }) },
   restockSubscription: {
     findMany: async ({ where }) => rows.filter((r) => matches(r, where)),
     updateMany: async ({ where, data }) => {
@@ -29,7 +31,17 @@ globalThis.prismaGlobal = {
       hit.forEach((r) => Object.assign(r, data));
       return { count: hit.length };
     },
-    update: async ({ where, data }) => Object.assign(rows.find((r) => r.id === where.id), data),
+    update: async ({ where, data }) => {
+      const row = rows.find((r) => r.id === where.id);
+      // Mirrors the unique index on (shop, variantId, emailHash).
+      if (data.emailHash && rows.some((r) => r !== row && r.shop === row.shop && r.variantId === row.variantId && r.emailHash === data.emailHash)) {
+        throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+      }
+      return Object.assign(row, data);
+    },
+    delete: async ({ where }) => {
+      rows = rows.filter((r) => r.id !== where.id);
+    },
     deleteMany: async ({ where }) => {
       const before = rows.length;
       rows = rows.filter((r) => !matches(r, where));
@@ -53,6 +65,31 @@ const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syn
 );
 const { cell } = await import("./routes/app.waitlist.export.tsx");
 const { purgeOldRecords } = await import("./retention.server.ts");
+const { encryptEmail, decryptEmail, emailHash, sealEmail, backfillEmails } = await import(
+  "./crypto.server.ts"
+);
+
+// Emails are stored encrypted: each write differs, reads round-trip, tampering fails,
+// and the lookup hash ignores case. Rows from before encryption still read.
+const sealed = encryptEmail("shopper@x.co");
+assert.ok(sealed.startsWith("v1:") && !sealed.includes("shopper"));
+assert.notEqual(encryptEmail("shopper@x.co"), sealed);
+assert.equal(decryptEmail(sealed), "shopper@x.co");
+assert.throws(() => decryptEmail(sealed.slice(0, -4) + "AAAA"));
+assert.equal(emailHash("Shopper@X.co"), emailHash("shopper@x.co"));
+assert.notEqual(emailHash("a@x.co"), emailHash("b@x.co"));
+assert.equal(decryptEmail("legacy@x.co"), "legacy@x.co");
+
+// Backfill encrypts old rows; an old row duplicated by a newer encrypted signup goes.
+rows = [
+  { id: "old-1", shop: "s", variantId: "1", email: "keep@x.co", emailHash: null },
+  { id: "old-2", shop: "s", variantId: "1", email: "dup@x.co", emailHash: null },
+  { id: "new-2", shop: "s", variantId: "1", ...sealEmail("dup@x.co") },
+];
+assert.equal(await backfillEmails(), 2);
+assert.deepEqual(rows.map((r) => r.id), ["old-1", "new-2"]);
+assert.equal(decryptEmail(rows[0].email), "keep@x.co");
+assert.equal(rows[0].emailHash, emailHash("keep@x.co"));
 
 // Unsubscribe tokens verify only for their own row.
 assert.ok(verifyUnsubscribeToken("sub_123", unsubscribeToken("sub_123")));
@@ -68,7 +105,7 @@ assert.equal(fromHeader("", "a@x.co"), "a@x.co");
 // A row stuck in SENDING by a dead process is retried; a fresh claim is left alone.
 const old = new Date(Date.now() - 60 * 60 * 1000);
 rows = [
-  { id: "a", shop: "s.myshopify.com", variantId: "1", email: "a@x.co", status: "PENDING" },
+  { id: "a", shop: "s.myshopify.com", variantId: "1", ...sealEmail("a@x.co"), status: "PENDING" },
   { id: "b", shop: "s.myshopify.com", variantId: "1", email: "b@x.co", status: "SENDING", claimedAt: old },
   { id: "c", shop: "s.myshopify.com", variantId: "1", email: "c@x.co", status: "SENDING", claimedAt: new Date() },
 ];
@@ -147,4 +184,4 @@ await assert.rejects(
   /already been taken/,
 );
 
-console.log("ok: notify.server, CSV export, retention and customer sync");
+console.log("ok: notify.server, CSV export, retention, encryption and customer sync");

@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { emailHash } from "../crypto.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
@@ -9,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const email = (payload as { customer?: { email?: string } }).customer?.email;
   if (email) {
     const { count } = await db.restockSubscription.deleteMany({
-      where: { shop, email: email.toLowerCase() },
+      where: { shop, emailHash: emailHash(email) },
     });
     console.log(`notify-me: redacted ${count} subscription(s)`);
   }
