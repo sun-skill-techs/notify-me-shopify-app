@@ -1,10 +1,10 @@
 import type { ActionFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
+import { verifyWebhook } from "../shopify.server";
 import db from "../db.server";
 import { emailHash } from "../crypto.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic, payload } = await authenticate.webhook(request);
+  const { shop, topic, payload } = await verifyWebhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
 
   const email = (payload as { customer?: { email?: string } }).customer?.email;
