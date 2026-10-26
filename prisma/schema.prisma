@@ -61,6 +61,7 @@ model ShopSettings {
   fromName    String   @default("")
   testSentAt  DateTime?
   setupDismissedAt DateTime?
+  reviewPromptDismissedAt DateTime?
   updatedAt   DateTime @updatedAt
 }
 

@@ -92,20 +92,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     emailTested: Boolean(settings?.testSentAt),
     widgetStyled: Boolean(data?.currentAppInstallation?.metafield),
     setupDismissed: Boolean(settings?.setupDismissedAt),
+    reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
   };
 };
 
-// The only action here is hiding the setup guide.
+// Hides the setup guide or the review prompt, whichever form was sent.
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  const field = form.get("intent") === "review" ? "reviewPromptDismissedAt" : "setupDismissedAt";
   await db.shopSettings.upsert({
     where: { shop: session.shop },
-    create: { shop: session.shop, setupDismissedAt: new Date() },
-    update: { setupDismissedAt: new Date() },
+    create: { shop: session.shop, [field]: new Date() },
+    update: { [field]: new Date() },
   });
   return { ok: true };
 };
+
+// Fallback when Shopify's in-admin review popup declines to open.
+const REVIEW_URL = "https://apps.shopify.com/restock-alerts-sun-skill-techs#modal-show=WriteReviewModal";
 
 type Task = {
   id: string;
@@ -200,9 +206,20 @@ export default function Index() {
     emailTested,
     widgetStyled,
     setupDismissed,
+    reviewDismissed,
     themeEditorUrl,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const reviewFetcher = useFetcher();
+  const dismissReview = () => reviewFetcher.submit({ intent: "review" }, { method: "post" });
+  const requestReview = async () => {
+    const res = await shopify.reviews.request();
+    // Shopify rate-limits the popup; send them to the listing instead, unless they already reviewed or closed it.
+    if (!res.success && res.code !== "already-reviewed" && res.code !== "cancelled") {
+      window.open(REVIEW_URL, "_blank");
+    }
+    dismissReview();
+  };
 
   const hasSignups = pending + sent + failed + unsubscribed > 0;
   const hasSent = sent > 0;
@@ -251,6 +268,8 @@ export default function Index() {
   ];
   const showGuide =
     !setupDismissed && fetcher.state === "idle" && !fetcher.data && tasks.some((t) => !t.done);
+  // Ask once the app has done its job: the first real restock email, not a test send.
+  const showReview = hasSent && !reviewDismissed && reviewFetcher.state === "idle" && !reviewFetcher.data;
 
   const attempted = sent + failed;
   const deliveryRate = attempted ? `${Math.round((sent / attempted) * 100)}%` : "—";
@@ -268,6 +287,21 @@ export default function Index() {
         Email settings
       </s-button>
       <style>{CHART_CSS + PROGRESS_CSS}</style>
+
+      {showReview && (
+        <s-banner tone="success" heading="Your first restock email went out" dismissible onDismiss={dismissReview}>
+          <s-paragraph>
+            Shoppers are getting their alerts. If BackSoon is helping, a quick
+            review helps other merchants find it.
+          </s-paragraph>
+          <s-button slot="secondary-actions" variant="primary" onClick={requestReview}>
+            Leave a review
+          </s-button>
+          <s-button slot="secondary-actions" onClick={dismissReview}>
+            Not now
+          </s-button>
+        </s-banner>
+      )}
 
       {failed > 0 && (
         <s-banner tone="warning" heading="Some emails could not be delivered">
