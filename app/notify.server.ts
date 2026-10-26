@@ -231,27 +231,30 @@ export async function buyableVariant(
   const response = await admin.graphql(
     `#graphql
       query notifyMeVariant($id: ID!) {
-        shop { name contactEmail }
+        shop { name contactEmail primaryDomain { url } }
         productVariant(id: $id) {
           id
           title
           availableForSale
           media(first: 1) { nodes { preview { image { url } } } }
-          product { title onlineStoreUrl featuredMedia { preview { image { url } } } }
+          product { title handle onlineStoreUrl featuredMedia { preview { image { url } } } }
         }
       }`,
     { variables: { id: variantGid } },
   );
   const { data } = await response.json();
   const v = data?.productVariant;
-  if (!v?.availableForSale || !v.product?.onlineStoreUrl) return null;
+  if (!v?.availableForSale || !v.product) return null;
+  // onlineStoreUrl is null while the storefront is password-protected (every dev store).
+  const productPage =
+    v.product.onlineStoreUrl ?? `${data.shop.primaryDomain.url}/products/${v.product.handle}`;
 
   const variantId = variantGid.split("/").pop()!;
   return {
     variantId,
     productTitle: v.product.title as string,
     variantTitle: v.title === "Default Title" ? "" : (v.title as string),
-    productUrl: `${v.product.onlineStoreUrl}?variant=${variantId}`,
+    productUrl: `${productPage}?variant=${variantId}`,
     imageUrl: (v.media?.nodes?.[0]?.preview?.image?.url ??
       v.product.featuredMedia?.preview?.image?.url ??
       null) as string | null,
