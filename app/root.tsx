@@ -13,6 +13,15 @@ export default function App() {
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="preconnect" href="https://cdn.shopify.com/" />
+        {/* Inter uses font-display: swap, so a late font reflows the page (CLS). Fetch the
+            Latin file up front. The filename is versioned: update it if styles.css changes. */}
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+          href="https://cdn.shopify.com/static/fonts/inter/v4/InterVariable-latin-1751944278923.woff2"
+        />
         <link
           rel="stylesheet"
           href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css"
