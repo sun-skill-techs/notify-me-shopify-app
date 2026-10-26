@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { CONTACT_EMAIL, loadTawk } from "../public-page";
+import { CONTACT_EMAIL, loadTawk, requestReview } from "../public-page";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -62,6 +62,15 @@ export default function Support() {
               <s-text color="subdued">{item.a}</s-text>
             </s-stack>
           ))}
+        </s-stack>
+      </s-section>
+
+      <s-section slot="aside" heading="Enjoying BackSoon?">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>A quick review helps other merchants find the app.</s-paragraph>
+          <s-button icon="star" onClick={requestReview}>
+            Leave a review
+          </s-button>
         </s-stack>
       </s-section>
 

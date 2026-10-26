@@ -3,6 +3,17 @@ import { useEffect, type ReactNode } from "react";
 import styles from "./public-page.module.css";
 
 export const CONTACT_EMAIL = "management.sunskilltechs@gmail.com";
+
+// Fallback when Shopify's in-admin review popup declines to open.
+const REVIEW_URL = "https://apps.shopify.com/restock-alerts-sun-skill-techs#modal-show=WriteReviewModal";
+
+// Shopify rate-limits the popup; send them to the listing instead, unless they already reviewed or closed it.
+export async function requestReview() {
+  const res = await shopify.reviews.request();
+  if (!res.success && res.code !== "already-reviewed" && res.code !== "cancelled") {
+    window.open(REVIEW_URL, "_blank");
+  }
+}
 const TAWK_SRC = "https://embed.tawk.to/6adefe094ec12134717f6669/1k5rh0lca";
 
 // Tawk.to live chat widget. Also used by the in-app support page.

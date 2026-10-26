@@ -10,6 +10,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { activity } from "../activity.server";
 import { METAFIELD } from "../widget";
+import { requestReview } from "../public-page";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
 
 const DAYS = 30;
@@ -110,9 +111,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: true };
 };
 
-// Fallback when Shopify's in-admin review popup declines to open.
-const REVIEW_URL = "https://apps.shopify.com/restock-alerts-sun-skill-techs#modal-show=WriteReviewModal";
-
 type Task = {
   id: string;
   done: boolean;
@@ -212,12 +210,8 @@ export default function Index() {
   const fetcher = useFetcher();
   const reviewFetcher = useFetcher();
   const dismissReview = () => reviewFetcher.submit({ intent: "review" }, { method: "post" });
-  const requestReview = async () => {
-    const res = await shopify.reviews.request();
-    // Shopify rate-limits the popup; send them to the listing instead, unless they already reviewed or closed it.
-    if (!res.success && res.code !== "already-reviewed" && res.code !== "cancelled") {
-      window.open(REVIEW_URL, "_blank");
-    }
+  const leaveReview = async () => {
+    await requestReview();
     dismissReview();
   };
 
@@ -294,7 +288,7 @@ export default function Index() {
             Shoppers are getting their alerts. If BackSoon is helping, a quick
             review helps other merchants find it.
           </s-paragraph>
-          <s-button slot="secondary-actions" variant="primary" onClick={requestReview}>
+          <s-button slot="secondary-actions" onClick={leaveReview}>
             Leave a review
           </s-button>
           <s-button slot="secondary-actions" onClick={dismissReview}>
