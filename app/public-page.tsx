@@ -1,11 +1,26 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import styles from "./public-page.module.css";
 
 const CONTACT_EMAIL = "management.sunskilltechs@gmail.com";
+const TAWK_SRC = "https://embed.tawk.to/6adefe094ec12134717f6669/1k5rh0lca";
 
 // Shared header and footer for the public pages: home, privacy and DPA.
 export function PublicPage({ children }: { children: ReactNode }) {
+  // Tawk.to live chat widget.
+  useEffect(() => {
+    if (document.querySelector(`script[src="${TAWK_SRC}"]`)) return;
+    const w = window as unknown as Record<string, unknown>;
+    w.Tawk_API ??= {};
+    w.Tawk_LoadStart = new Date();
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = TAWK_SRC;
+    s.charset = "UTF-8";
+    s.setAttribute("crossorigin", "*");
+    document.body.appendChild(s);
+  }, []);
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
