@@ -60,7 +60,7 @@ globalThis.fetch = async (_url, init) => {
   });
 };
 
-const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer } = await import(
+const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer, buyableVariant } = await import(
   "./notify.server.ts"
 );
 const { cell } = await import("./routes/app.waitlist.export.tsx");
@@ -184,4 +184,16 @@ await assert.rejects(
   /already been taken/,
 );
 
-console.log("ok: notify.server, CSV export, retention, encryption and customer sync");
+// Product link: falls back to the handle on a password-protected store; drafts are skipped.
+const variantAdmin = (product) => ({
+  graphql: async () => Response.json({ data: {
+    shop: { name: "S", contactEmail: null, primaryDomain: { url: "https://s.com" } },
+    productVariant: { title: "Red", availableForSale: true, product: { title: "P", handle: "p", featuredMedia: null, ...product } },
+  } }),
+});
+const gid = "gid://shopify/ProductVariant/9";
+assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: null }), gid)).productUrl, "https://s.com/products/p?variant=9");
+assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: "https://s.com/x" }), gid)).productUrl, "https://s.com/x?variant=9");
+assert.equal(await buyableVariant(variantAdmin({ status: "DRAFT", onlineStoreUrl: null }), gid), null);
+
+console.log("ok: notify.server, CSV export, retention, encryption, customer sync and product links");

@@ -237,15 +237,16 @@ export async function buyableVariant(
           title
           availableForSale
           media(first: 1) { nodes { preview { image { url } } } }
-          product { title handle onlineStoreUrl featuredMedia { preview { image { url } } } }
+          product { title handle status onlineStoreUrl featuredMedia { preview { image { url } } } }
         }
       }`,
     { variables: { id: variantGid } },
   );
   const { data } = await response.json();
   const v = data?.productVariant;
-  if (!v?.availableForSale || !v.product) return null;
-  // onlineStoreUrl is null while the storefront is password-protected (every dev store).
+  if (!v?.availableForSale || v.product?.status !== "ACTIVE") return null;
+  // onlineStoreUrl is null while the storefront is password-protected (every dev store),
+  // so build the link from the handle; the ACTIVE check keeps drafts from being linked.
   const productPage =
     v.product.onlineStoreUrl ?? `${data.shop.primaryDomain.url}/products/${v.product.handle}`;
 
