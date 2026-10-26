@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -10,7 +10,6 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { activity } from "../activity.server";
 import { METAFIELD } from "../widget";
-import { requestReview } from "../public-page";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
 
 const DAYS = 30;
@@ -209,11 +208,6 @@ export default function Index() {
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const reviewFetcher = useFetcher();
-  const dismissReview = () => reviewFetcher.submit({ intent: "review" }, { method: "post" });
-  const leaveReview = async () => {
-    await requestReview();
-    dismissReview();
-  };
 
   const hasSignups = pending + sent + failed + unsubscribed > 0;
   const hasSent = sent > 0;
@@ -263,7 +257,17 @@ export default function Index() {
   const showGuide =
     !setupDismissed && fetcher.state === "idle" && !fetcher.data && tasks.some((t) => !t.done);
   // Ask once the app has done its job: the first real restock email, not a test send.
-  const showReview = hasSent && !reviewDismissed && reviewFetcher.state === "idle" && !reviewFetcher.data;
+  // Shopify's own review popup opens on the next Home visit. If Shopify declines to show it
+  // (rate limit, unlisted app), try again on a later visit; a review or a close ends it.
+  useEffect(() => {
+    if (!hasSent || reviewDismissed) return;
+    shopify.reviews.request().then((res) => {
+      if (res.success || res.code === "already-reviewed" || res.code === "cancelled") {
+        reviewFetcher.submit({ intent: "review" }, { method: "post" });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const attempted = sent + failed;
   const deliveryRate = attempted ? `${Math.round((sent / attempted) * 100)}%` : "—";
@@ -281,21 +285,6 @@ export default function Index() {
         Email settings
       </s-button>
       <style>{CHART_CSS + PROGRESS_CSS}</style>
-
-      {showReview && (
-        <s-banner tone="success" heading="Your first restock email went out" dismissible onDismiss={dismissReview}>
-          <s-paragraph>
-            Shoppers are getting their alerts. If BackSoon is helping, a quick
-            review helps other merchants find it.
-          </s-paragraph>
-          <s-button slot="secondary-actions" onClick={leaveReview}>
-            Leave a review
-          </s-button>
-          <s-button slot="secondary-actions" onClick={dismissReview}>
-            Not now
-          </s-button>
-        </s-banner>
-      )}
 
       {failed > 0 && (
         <s-banner tone="warning" heading="Some emails could not be delivered">
