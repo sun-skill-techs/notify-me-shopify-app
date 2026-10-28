@@ -33,6 +33,11 @@ assert.equal(s.privacyUrl, "");
 assert.ok(!("unknownKey" in s));
 assert.equal(sanitize({ privacyUrl: "https://shop.com/privacy" }).privacyUrl, "https://shop.com/privacy");
 
+// Font: theme's by default, an offered stack when picked, never free text.
+assert.ok(toStyle(sanitize({})).includes("--notify-me-font: inherit;"));
+assert.ok(toStyle(sanitize({ font: "serif" })).includes("--notify-me-font: Georgia,"));
+assert.equal(sanitize({ font: "Comic Sans; color: red" }).font, "theme");
+
 // The style string only ever carries sanitized values.
 assert.ok(toStyle(s).includes("--notify-me-trigger-bg: #abcdef;"));
 assert.ok(!toStyle(s).includes("url("));

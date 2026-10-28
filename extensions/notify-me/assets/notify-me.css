@@ -1,7 +1,9 @@
 /*
-  Inherits the theme's font. Colors and sizes come from the merchant's design
-  settings in the app admin, passed as the custom properties below in the
-  block's style attribute (see app/widget.ts). These defaults match the
+  Inherits the theme's font unless the merchant picks one. Colors, sizes and
+  font come from the merchant's design settings in the app admin, passed as
+  the custom properties below in the block's style attribute (see
+  app/widget.ts). Sizes are px, not rem: many themes shrink the root font
+  size, which would shrink the popup with it. These defaults match the
   admin's, so an unsaved install looks the same as the preview. Hairlines and
   tints are derived from currentColor so any pair of colors works.
 */
@@ -26,7 +28,8 @@
   --notify-me-cta-bg: #1f1c17;
   --notify-me-cta-fg: #fbfaf7;
   --notify-me-radius: 10px;
-  --notify-me-heading-font: Georgia, "Times New Roman", serif;
+  --notify-me-font: inherit;
+  --notify-me-heading-font: inherit;
   --notify-me-heading-size: 28px;
   --notify-me-hairline: color-mix(in srgb, currentColor 14%, transparent);
   --notify-me-hairline-strong: color-mix(in srgb, currentColor 26%, transparent);
@@ -34,6 +37,7 @@
 
   margin: var(--notify-me-mt) 0 var(--notify-me-mb);
   font: inherit;
+  font-family: var(--notify-me-font);
   color: inherit;
 }
 
@@ -90,9 +94,9 @@
 /* Dialog ------------------------------------------------------------- */
 
 .notify-me__dialog {
-  width: min(27rem, calc(100vw - 2rem));
+  width: min(460px, calc(100vw - 32px));
   max-width: none;
-  max-height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 32px);
   padding: 0;
   border: 0;
   border-radius: var(--notify-me-radius);
@@ -126,19 +130,19 @@ html:has(.notify-me__dialog[open]) {
    itself is a click on the backdrop. */
 .notify-me__panel {
   position: relative;
-  padding: 1.75rem 1.75rem 1.5rem;
+  padding: 28px 28px 24px;
   border-top: 3px solid var(--notify-me-gold);
 }
 
 .notify-me__close {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
+  top: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid var(--notify-me-hairline);
   border-radius: 50%;
@@ -151,8 +155,8 @@ html:has(.notify-me__dialog[open]) {
 }
 
 .notify-me__close svg {
-  width: 1rem;
-  height: 1rem;
+  width: 16px;
+  height: 16px;
 }
 
 .notify-me__close:hover {
@@ -168,17 +172,17 @@ html:has(.notify-me__dialog[open]) {
 /* Product slip: thumbnail + name, torn off from the form by a dashed rule. */
 .notify-me__product {
   display: flex;
-  gap: 0.875rem;
+  gap: 14px;
   align-items: center;
-  padding: 0 2.75rem 1.25rem 0;
-  margin-bottom: 1.5rem;
+  padding: 0 44px 20px 0;
+  margin-bottom: 24px;
   border-bottom: 1px dashed var(--notify-me-hairline-strong);
 }
 
 .notify-me__thumb {
   flex: none;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 56px;
+  height: 56px;
   object-fit: cover;
   border-radius: calc(var(--notify-me-radius) * 0.6);
   background: var(--notify-me-tint);
@@ -190,10 +194,10 @@ html:has(.notify-me__dialog[open]) {
 
 .notify-me__eyebrow {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   align-items: center;
-  margin: 0 0 0.3rem;
-  font-size: 0.6875rem;
+  margin: 0 0 4.8px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -202,8 +206,8 @@ html:has(.notify-me__dialog[open]) {
 
 .notify-me__eyebrow::before {
   content: "";
-  width: 0.3125rem;
-  height: 0.3125rem;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
   animation: notify-me-pulse 2s ease-in-out infinite;
@@ -212,7 +216,7 @@ html:has(.notify-me__dialog[open]) {
 .notify-me__product-title {
   margin: 0;
   overflow: hidden;
-  font-size: 0.9375rem;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -232,19 +236,19 @@ html:has(.notify-me__dialog[open]) {
 }
 
 .notify-me__subheading {
-  margin: 0.5rem 0 0;
-  font-size: 0.9375rem;
+  margin: 8px 0 0;
+  font-size: 16px;
   line-height: 1.5;
   opacity: 0.68;
 }
 
 .notify-me__variant-name {
   display: inline-flex;
-  margin: 1rem 0 0;
-  padding: 0.3rem 0.75rem;
+  margin: 16px 0 0;
+  padding: 4.8px 12px;
   border: 1px solid var(--notify-me-hairline-strong);
   border-radius: 999px;
-  font-size: 0.8125rem;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -260,13 +264,13 @@ html:has(.notify-me__dialog[open]) {
 }
 
 .notify-me__group {
-  margin-top: 1.25rem;
+  margin-top: 20px;
 }
 
 .notify-me__label {
   display: block;
-  margin-bottom: 0.4rem;
-  font-size: 0.6875rem;
+  margin-bottom: 6.4px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -276,12 +280,12 @@ html:has(.notify-me__dialog[open]) {
 .notify-me__control {
   box-sizing: border-box;
   width: 100%;
-  min-height: 3rem;
-  padding: 0.75rem 0.9rem;
+  min-height: 48px;
+  padding: 12px 14.4px;
   border: 1px solid var(--notify-me-hairline-strong);
   border-radius: calc(var(--notify-me-radius) * 0.6);
   font: inherit;
-  font-size: 1rem; /* 16px keeps iOS from zooming on focus */
+  font-size: 16px; /* 16px keeps iOS from zooming on focus */
   color: inherit;
   background: var(--notify-me-tint);
   box-shadow: none;
@@ -310,7 +314,7 @@ html:has(.notify-me__dialog[open]) {
 }
 
 .notify-me__select {
-  padding-right: 2.5rem;
+  padding-right: 40px;
   appearance: none;
   cursor: pointer;
 }
@@ -319,9 +323,9 @@ html:has(.notify-me__dialog[open]) {
   content: "";
   position: absolute;
   top: 50%;
-  right: 1rem;
-  width: 0.45rem;
-  height: 0.45rem;
+  right: 16px;
+  width: 7.2px;
+  height: 7.2px;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translateY(-70%) rotate(45deg);
@@ -331,17 +335,17 @@ html:has(.notify-me__dialog[open]) {
 .notify-me__button {
   box-sizing: border-box;
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   width: 100%;
-  min-height: 3.125rem;
-  margin-top: 1.25rem;
+  min-height: 50px;
+  margin-top: 20px;
   align-items: center;
   justify-content: center;
-  padding: 0.75rem 1.5rem;
+  padding: 12px 24px;
   border: none;
   border-radius: calc(var(--notify-me-radius) * 0.6);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.12em;
@@ -378,8 +382,8 @@ html:has(.notify-me__dialog[open]) {
 
 .notify-me__spinner {
   display: none;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 14px;
+  height: 14px;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: 50%;
@@ -393,9 +397,9 @@ html:has(.notify-me__dialog[open]) {
 /* Supporting text ---------------------------------------------------- */
 
 .notify-me__fine-print {
-  margin: 1rem 0 0;
+  margin: 16px 0 0;
   font-style: italic;
-  font-size: 0.8125rem;
+  font-size: 14px;
   line-height: 1.5;
   text-align: center;
   opacity: 0.6;
@@ -412,10 +416,10 @@ html:has(.notify-me__dialog[open]) {
 
 .notify-me__message {
   display: none;
-  margin: 0.75rem 0 0;
-  padding: 0.6875rem 0.875rem;
+  margin: 12px 0 0;
+  padding: 11px 14px;
   border-radius: calc(var(--notify-me-radius) * 0.6);
-  font-size: 0.875rem;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -437,7 +441,7 @@ html:has(.notify-me__dialog[open]) {
 /* Success view ------------------------------------------------------- */
 
 .notify-me__success {
-  padding: 0.5rem 0 0;
+  padding: 8px 0 0;
   text-align: center;
   animation: notify-me-appear 0.25s ease-out;
 }
@@ -446,17 +450,17 @@ html:has(.notify-me__dialog[open]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  margin-bottom: 1rem;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
   border: 1px solid var(--notify-me-gold);
   border-radius: 50%;
   color: var(--notify-me-gold);
 }
 
 .notify-me__check svg {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   stroke-dasharray: 24;
   stroke-dashoffset: 24;
   animation: notify-me-draw 0.45s 0.1s ease-out forwards;
@@ -513,7 +517,7 @@ html:has(.notify-me__dialog[open]) {
 @media (max-width: 40rem) {
   .notify-me__dialog {
     width: 100%;
-    max-height: calc(100dvh - 3rem);
+    max-height: calc(100dvh - 48px);
     margin: auto 0 0;
     border-radius: var(--notify-me-radius) var(--notify-me-radius) 0 0;
   }
@@ -523,7 +527,7 @@ html:has(.notify-me__dialog[open]) {
   }
 
   .notify-me__panel {
-    padding: 1.5rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+    padding: 24px 20px calc(20px + env(safe-area-inset-bottom));
   }
 }
 

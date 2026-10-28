@@ -27,7 +27,8 @@ export const DEFAULTS = {
   popupButtonBg: "#1f1c17",
   popupButtonFg: "#fbfaf7",
   popupRadius: 10,
-  headingFont: "serif",
+  font: "theme",
+  headingFont: "theme",
   headingSize: 28,
   showImage: true,
 
@@ -62,8 +63,17 @@ export const RANGES = {
   headingSize: [18, 44],
 } satisfies Partial<Record<keyof WidgetSettings, [number, number]>>;
 
+// Font stacks the merchant can pick; "theme" inherits the storefront's font.
+export const FONTS: Record<string, string> = {
+  theme: "inherit",
+  sans: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  mono: 'ui-monospace, Menlo, Consolas, "Courier New", monospace',
+};
+
 export const CHOICES = {
   buttonWeight: ["400", "500", "600", "700"],
+  font: Object.keys(FONTS),
   headingFont: ["serif", "theme"],
 } satisfies Partial<Record<keyof WidgetSettings, string[]>>;
 
@@ -125,7 +135,8 @@ export function styleVars(s: WidgetSettings): Record<string, string> {
     "--notify-me-cta-bg": s.popupButtonBg,
     "--notify-me-cta-fg": s.popupButtonFg,
     "--notify-me-radius": `${s.popupRadius}px`,
-    "--notify-me-heading-font": s.headingFont === "serif" ? 'Georgia, "Times New Roman", serif' : "inherit",
+    "--notify-me-font": FONTS[s.font],
+    "--notify-me-heading-font": s.headingFont === "serif" ? FONTS.serif : "inherit",
     "--notify-me-heading-size": `${s.headingSize}px`,
   };
 }

@@ -123,9 +123,15 @@ const POPUP_THEMES: Preset[] = [
   ["White", { popupBg: "#ffffff", popupFg: "#1a1a1a", popupAccent: "#1a1a1a", popupButtonBg: "#1a1a1a", popupButtonFg: "#ffffff" }],
   ["Dark", { popupBg: "#1f1c17", popupFg: "#f5f2ec", popupAccent: "#d4b26a", popupButtonBg: "#f5f2ec", popupButtonFg: "#1f1c17" }],
 ];
+const FONTS: Preset[] = [
+  ["Same as your theme", { font: "theme" }],
+  ["Sans-serif", { font: "sans" }],
+  ["Serif", { font: "serif" }],
+  ["Monospace", { font: "mono" }],
+];
 const HEADING_FONTS: Preset[] = [
+  ["Same as the widget", { headingFont: "theme" }],
   ["Serif", { headingFont: "serif" }],
-  ["Same as your theme", { headingFont: "theme" }],
 ];
 const HEADING_SIZES: Preset[] = [
   ["Small", { headingSize: 22 }],
@@ -234,6 +240,7 @@ export default function WidgetPage() {
       <s-section heading="Text">
         <s-stack direction="block" gap="base">
           {text("buttonText", "Button label")}
+          {choose("Font", FONTS)}
           {choose("Letter case", BUTTON_CASES)}
           {toggle("buttonIcon", "Show bell icon")}
         </s-stack>
@@ -266,6 +273,7 @@ export default function WidgetPage() {
           <s-grid gridTemplateColumns="1fr 1fr" gap="base">
             {choose("Color theme", POPUP_THEMES)}
             {choose("Corners", POPUP_CORNERS)}
+            {choose("Font", FONTS)}
             {choose("Heading font", HEADING_FONTS)}
             {choose("Heading size", HEADING_SIZES)}
           </s-grid>
@@ -353,7 +361,7 @@ export default function WidgetPage() {
                 )}
                 {tab === "button" ? <ButtonPreview s={s} /> : <PopupPreview s={s} view={view} />}
                 <s-text color="subdued">
-                  Fonts follow your theme on the storefront.
+                  "Same as your theme" uses your theme's font on the storefront.
                 </s-text>
               </s-stack>
             </s-section>
