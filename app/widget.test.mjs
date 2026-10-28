@@ -33,10 +33,10 @@ assert.equal(s.privacyUrl, "");
 assert.ok(!("unknownKey" in s));
 assert.equal(sanitize({ privacyUrl: "https://shop.com/privacy" }).privacyUrl, "https://shop.com/privacy");
 
-// Font: theme's by default, an offered stack when picked, never free text.
-assert.ok(toStyle(sanitize({})).includes("--notify-me-font: inherit;"));
-assert.ok(toStyle(sanitize({ font: "serif" })).includes("--notify-me-font: Georgia,"));
-assert.equal(sanitize({ font: "Comic Sans; color: red" }).font, "theme");
+// Custom CSS is printed raw inside <style>, so it can't close the tag.
+assert.equal(sanitize({ customCss: ".x{color:red}</style><script>alert(1)" }).customCss, ".x{color:red}/style>script>alert(1)");
+assert.equal(sanitize({ customCss: 42 }).customCss, "");
+assert.equal(sanitize({ customCss: "a".repeat(20000) }).customCss.length, 10000);
 
 // The style string only ever carries sanitized values.
 assert.ok(toStyle(s).includes("--notify-me-trigger-bg: #abcdef;"));

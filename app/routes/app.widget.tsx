@@ -123,14 +123,8 @@ const POPUP_THEMES: Preset[] = [
   ["White", { popupBg: "#ffffff", popupFg: "#1a1a1a", popupAccent: "#1a1a1a", popupButtonBg: "#1a1a1a", popupButtonFg: "#ffffff" }],
   ["Dark", { popupBg: "#1f1c17", popupFg: "#f5f2ec", popupAccent: "#d4b26a", popupButtonBg: "#f5f2ec", popupButtonFg: "#1f1c17" }],
 ];
-const FONTS: Preset[] = [
-  ["Same as your theme", { font: "theme" }],
-  ["Sans-serif", { font: "sans" }],
-  ["Serif", { font: "serif" }],
-  ["Monospace", { font: "mono" }],
-];
 const HEADING_FONTS: Preset[] = [
-  ["Same as the widget", { headingFont: "theme" }],
+  ["Same as your theme", { headingFont: "theme" }],
   ["Serif", { headingFont: "serif" }],
 ];
 const HEADING_SIZES: Preset[] = [
@@ -240,7 +234,6 @@ export default function WidgetPage() {
       <s-section heading="Text">
         <s-stack direction="block" gap="base">
           {text("buttonText", "Button label")}
-          {choose("Font", FONTS)}
           {choose("Letter case", BUTTON_CASES)}
           {toggle("buttonIcon", "Show bell icon")}
         </s-stack>
@@ -273,7 +266,6 @@ export default function WidgetPage() {
           <s-grid gridTemplateColumns="1fr 1fr" gap="base">
             {choose("Color theme", POPUP_THEMES)}
             {choose("Corners", POPUP_CORNERS)}
-            {choose("Font", FONTS)}
             {choose("Heading font", HEADING_FONTS)}
             {choose("Heading size", HEADING_SIZES)}
           </s-grid>
@@ -341,6 +333,8 @@ export default function WidgetPage() {
 
       <style>{data.widgetCss}</style>
       <style>{LAYOUT_CSS}</style>
+      {/* Nested under the preview so a stray rule can't restyle this admin page. */}
+      <style>{`.nm-stage { ${s.customCss} }`}</style>
       <s-stack direction="block" gap="base">
         <s-button-group gap="none" accessibilityLabel="Part of the widget to design">
           {segment("button", tab, setTab, "Product page button")}
@@ -348,7 +342,20 @@ export default function WidgetPage() {
         </s-button-group>
 
         <div className="nm-layout">
-          {tab === "button" ? buttonTab : popupTab}
+          <s-stack direction="block" gap="base">
+            {tab === "button" ? buttonTab : popupTab}
+            <s-section heading="Custom CSS">
+              <s-text-area
+                label="CSS"
+                labelAccessibilityVisibility="exclusive"
+                rows={8}
+                value={s.customCss}
+                placeholder={".notify-me__heading {\n  letter-spacing: 0;\n}"}
+                details="Applies to the button and popup on your storefront. Target classes such as .notify-me__trigger, .notify-me__dialog and .notify-me__heading."
+                onInput={(e: FieldEvent) => set("customCss", e.currentTarget.value)}
+              />
+            </s-section>
+          </s-stack>
 
           <div className="nm-sticky">
             <s-section heading="Preview">
@@ -361,7 +368,7 @@ export default function WidgetPage() {
                 )}
                 {tab === "button" ? <ButtonPreview s={s} /> : <PopupPreview s={s} view={view} />}
                 <s-text color="subdued">
-                  "Same as your theme" uses your theme's font on the storefront.
+                  Fonts follow your theme on the storefront.
                 </s-text>
               </s-stack>
             </s-section>

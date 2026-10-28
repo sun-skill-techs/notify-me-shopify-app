@@ -33,6 +33,10 @@
       {{- variant.id }}:{% if variant.available %}1{% else %}0{% endif %}{% unless forloop.last %},{% endunless -%}
     {%- endfor -%}
   {% endcapture %}
+  {%- comment -%} Saved from the app's Widget design page, which strips "<". {%- endcomment -%}
+  {% if w.customCss != blank %}
+    <style>{{ w.customCss }}</style>
+  {% endif %}
   <div
     class="notify-me"
     data-notify-me

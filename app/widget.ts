@@ -27,7 +27,6 @@ export const DEFAULTS = {
   popupButtonBg: "#1f1c17",
   popupButtonFg: "#fbfaf7",
   popupRadius: 10,
-  font: "theme",
   headingFont: "theme",
   headingSize: 28,
   showImage: true,
@@ -47,6 +46,9 @@ export const DEFAULTS = {
   doneText: "Done",
   invalidText: "Enter a valid email address.",
   errorText: "Something went wrong. Try again.",
+
+  // Printed by the block in a <style> tag after the widget stylesheet.
+  customCss: "",
 };
 
 export type WidgetSettings = typeof DEFAULTS;
@@ -63,23 +65,14 @@ export const RANGES = {
   headingSize: [18, 44],
 } satisfies Partial<Record<keyof WidgetSettings, [number, number]>>;
 
-// Font stacks the merchant can pick; "theme" inherits the storefront's font.
-export const FONTS: Record<string, string> = {
-  theme: "inherit",
-  sans: 'system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif',
-  serif: 'Georgia, "Times New Roman", serif',
-  mono: 'ui-monospace, Menlo, Consolas, "Courier New", monospace',
-};
-
 export const CHOICES = {
   buttonWeight: ["400", "500", "600", "700"],
-  font: Object.keys(FONTS),
   headingFont: ["serif", "theme"],
 } satisfies Partial<Record<keyof WidgetSettings, string[]>>;
 
 // Text the merchant may clear to hide that line; everything else falls back
 // to its default when left empty.
-const OPTIONAL = new Set(["eyebrow", "subheading", "finePrint", "privacyUrl"]);
+const OPTIONAL = new Set(["eyebrow", "subheading", "finePrint", "privacyUrl", "customCss"]);
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -108,6 +101,10 @@ export function sanitize(input: unknown): WidgetSettings {
   }
 
   if (!/^https?:\/\/\S+$/i.test(out.privacyUrl as string)) out.privacyUrl = "";
+  // Liquid prints this unescaped inside <style>, so "<" (as in "</style>")
+  // must never get through. CSS has no use for it.
+  const css = raw.customCss;
+  out.customCss = typeof css === "string" ? css.replace(/</g, "").trim().slice(0, 10000) : "";
   return out as WidgetSettings;
 }
 
@@ -135,8 +132,7 @@ export function styleVars(s: WidgetSettings): Record<string, string> {
     "--notify-me-cta-bg": s.popupButtonBg,
     "--notify-me-cta-fg": s.popupButtonFg,
     "--notify-me-radius": `${s.popupRadius}px`,
-    "--notify-me-font": FONTS[s.font],
-    "--notify-me-heading-font": s.headingFont === "serif" ? FONTS.serif : "inherit",
+    "--notify-me-heading-font": s.headingFont === "serif" ? 'Georgia, "Times New Roman", serif' : "inherit",
     "--notify-me-heading-size": `${s.headingSize}px`,
   };
 }

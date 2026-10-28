@@ -1,11 +1,11 @@
 /*
-  Inherits the theme's font unless the merchant picks one. Colors, sizes and
-  font come from the merchant's design settings in the app admin, passed as
-  the custom properties below in the block's style attribute (see
-  app/widget.ts). Sizes are px, not rem: many themes shrink the root font
-  size, which would shrink the popup with it. These defaults match the
-  admin's, so an unsaved install looks the same as the preview. Hairlines and
-  tints are derived from currentColor so any pair of colors works.
+  Inherits the theme's font. Colors and sizes come from the merchant's
+  design settings in the app admin, passed as the custom properties below in
+  the block's style attribute (see app/widget.ts). Sizes are px, not rem: many
+  themes shrink the root font size, which would shrink the popup with it.
+  The merchant's custom CSS is printed by the block after this file. These
+  defaults match the admin's, so an unsaved install looks the same as the
+  preview. Hairlines and tints are derived from currentColor so any pair of colors works.
 */
 .notify-me {
   --notify-me-mt: 16px;
@@ -28,7 +28,6 @@
   --notify-me-cta-bg: #1f1c17;
   --notify-me-cta-fg: #fbfaf7;
   --notify-me-radius: 10px;
-  --notify-me-font: inherit;
   --notify-me-heading-font: inherit;
   --notify-me-heading-size: 28px;
   --notify-me-hairline: color-mix(in srgb, currentColor 14%, transparent);
@@ -37,7 +36,6 @@
 
   margin: var(--notify-me-mt) 0 var(--notify-me-mb);
   font: inherit;
-  font-family: var(--notify-me-font);
   color: inherit;
 }
 
