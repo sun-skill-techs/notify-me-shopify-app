@@ -74,6 +74,15 @@ export default function Support() {
         </s-stack>
       </s-section>
 
+      <s-section slot="aside" heading="Need custom work?">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>We also build custom Shopify features and apps. Email us what you need.</s-paragraph>
+          <s-button icon="email" href={`mailto:${CONTACT_EMAIL}?subject=Custom%20work`} target="_blank">
+            Email us
+          </s-button>
+        </s-stack>
+      </s-section>
+
       <s-section slot="aside" heading="Policies">
         <s-stack direction="block" gap="small-100">
           <s-link href="/privacy" target="_blank">Privacy policy</s-link>
