@@ -8,68 +8,31 @@ import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import {
-  DEFAULTS,
-  METAFIELD,
-  sanitize,
-  styleVars,
-  toStyle,
-  type WidgetSettings,
-} from "../widget";
+import { DEFAULTS, sanitize, styleVars, type WidgetSettings } from "../widget";
+import { readWidget, saveWidget } from "../widget.server";
+import { shopPlan } from "../plans.server";
+import { atLeast } from "../plans";
 // The storefront block's own stylesheet, so the preview is the real thing.
 // Inlined via the loader: in dev the Shopify CLI proxy owns /extensions/*,
 // so linking the file by URL 404s and the preview renders unstyled.
 import widgetCss from "../../extensions/notify-me/assets/notify-me.css?raw";
 
-const INSTALLATION_QUERY = `#graphql
-  query notifyMeWidget($namespace: String!, $key: String!) {
-    currentAppInstallation {
-      id
-      metafield(namespace: $namespace, key: $key) { jsonValue }
-    }
-  }`;
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const res = await admin.graphql(INSTALLATION_QUERY, { variables: METAFIELD });
-  const { data } = await res.json();
-  return {
-    settings: sanitize(data?.currentAppInstallation?.metafield?.jsonValue),
-    widgetCss,
-  };
+  const { admin, session } = await authenticate.admin(request);
+  const [{ settings }, plan] = await Promise.all([readWidget(admin), shopPlan(session.shop)]);
+  return { settings, widgetCss, customCssAllowed: atLeast(plan, "basic") };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const settings = sanitize(await request.json().catch(() => null));
+  // Custom CSS is a Basic feature; Free stores save everything else.
+  if (!atLeast(await shopPlan(session.shop), "basic")) settings.customCss = "";
 
-  const res = await admin.graphql(INSTALLATION_QUERY, { variables: METAFIELD });
-  const { data } = await res.json();
-  const ownerId = data?.currentAppInstallation?.id;
+  const { ownerId } = await readWidget(admin);
   if (!ownerId) return { ok: false, message: "Could not find the app installation." };
 
-  // The block reads this in Liquid; `style` is precomputed so the theme
-  // doesn't have to rebuild CSS from individual values.
-  const save = await admin.graphql(
-    `#graphql
-      mutation notifyMeSaveWidget($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) { userErrors { message } }
-      }`,
-    {
-      variables: {
-        metafields: [
-          {
-            ...METAFIELD,
-            ownerId,
-            type: "json",
-            value: JSON.stringify({ ...settings, style: toStyle(settings) }),
-          },
-        ],
-      },
-    },
-  );
-  const result = await save.json();
-  const error = result.data?.metafieldsSet?.userErrors?.[0]?.message;
+  const error = await saveWidget(admin, ownerId, settings);
   if (error) return { ok: false, message: `Could not save: ${error}` };
   return { ok: true, message: "Widget saved" };
 };
@@ -345,15 +308,24 @@ export default function WidgetPage() {
           <s-stack direction="block" gap="base">
             {tab === "button" ? buttonTab : popupTab}
             <s-section heading="Custom CSS">
-              <s-text-area
-                label="CSS"
-                labelAccessibilityVisibility="exclusive"
-                rows={8}
-                value={s.customCss}
-                placeholder={".notify-me__heading {\n  letter-spacing: 0;\n}"}
-                details="Applies to the button and popup on your storefront. Target classes such as .notify-me__trigger, .notify-me__dialog and .notify-me__heading."
-                onInput={(e: FieldEvent) => set("customCss", e.currentTarget.value)}
-              />
+              {data.customCssAllowed ? (
+                <s-text-area
+                  label="CSS"
+                  labelAccessibilityVisibility="exclusive"
+                  rows={8}
+                  value={s.customCss}
+                  placeholder={".notify-me__heading {\n  letter-spacing: 0;\n}"}
+                  details="Applies to the button and popup on your storefront. Target classes such as .notify-me__trigger, .notify-me__dialog and .notify-me__heading."
+                  onInput={(e: FieldEvent) => set("customCss", e.currentTarget.value)}
+                />
+              ) : (
+                <s-stack direction="block" gap="small-200">
+                  <s-text color="subdued">
+                    Add your own CSS to the button and popup on the Basic plan.
+                  </s-text>
+                  <s-button href="/app/plans" icon="lock">Upgrade to Basic</s-button>
+                </s-stack>
+              )}
             </s-section>
           </s-stack>
 

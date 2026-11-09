@@ -1,7 +1,8 @@
 // Run: npx vite-node app/notify.test.mjs
 // Exercises the real notify.server.ts with Prisma and the Resend API faked:
 // token signing, the From header, reply-to, stale-claim recovery, CSV escaping,
-// the retention purge, email encryption and the customer sync.
+// the retention purge, email encryption, the customer sync, plan limits and
+// features, re-notify, and the click-tracking redirect.
 import assert from "node:assert/strict";
 
 process.env.SHOPIFY_API_SECRET = "test-secret";
@@ -14,6 +15,7 @@ process.env.SHOPIFY_API_KEY = "test-key";
 
 // db.server reuses global.prismaGlobal outside production, so this fake stands in for Prisma.
 let rows = [];
+let settings = null;
 const matches = (row, where) =>
   Object.entries(where).every(([k, v]) => {
     if (k === "OR") return v.some((w) => matches(row, w));
@@ -22,7 +24,16 @@ const matches = (row, where) =>
   });
 globalThis.prismaGlobal = {
   session: { count: async () => 0 }, // shopify.server's session storage probes it at load
-  shopSettings: { findUnique: async () => null },
+  // One shop's settings; null means none saved (a Free store).
+  shopSettings: {
+    findUnique: async () => settings,
+    updateMany: async ({ where, data }) => {
+      if (!settings || settings.usageMonth !== where.usageMonth) return { count: 0 };
+      settings.usageCount += data.usageCount.increment;
+      return { count: 1 };
+    },
+    upsert: async ({ create, update }) => (settings = settings ? Object.assign(settings, update) : { ...create }),
+  },
   dataAccessLog: { deleteMany: async () => ({ count: 0 }) },
   restockSubscription: {
     findMany: async ({ where }) => rows.filter((r) => matches(r, where)),
@@ -119,7 +130,7 @@ const result = await notifyVariant({
   shopName: "Linen & Co",
   shopContactEmail: "hello@linen.co",
 });
-assert.deepEqual(result, { sent: 2, failed: 0 });
+assert.deepEqual(result, { sent: 2, failed: 0, held: 0 });
 assert.deepEqual(sent.map((e) => e.to[0]).sort(), ["a@x.co", "b@x.co"]);
 assert.equal(rows.find((r) => r.id === "c").status, "SENDING");
 
@@ -196,4 +207,109 @@ assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreU
 assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: "https://s.com/x" }), gid)).productUrl, "https://s.com/x?variant=9");
 assert.equal(await buyableVariant(variantAdmin({ status: "DRAFT", onlineStoreUrl: null }), gid), null);
 
-console.log("ok: notify.server, CSV export, retention, encryption, customer sync and product links");
+// --- Plans ---
+const { planFromHandles, effectivePlan } = await import("./plans.server.ts");
+const { loader: clickLoader } = await import("./routes/c.$id.tsx");
+const { trackedUrl } = await import("./notify.server.ts");
+assert.equal(planFromHandles([]), "free");
+assert.equal(planFromHandles(["basic-yearly"]), "basic");
+assert.equal(planFromHandles(["Grow"]), "grow");
+assert.equal(effectivePlan(null), "free");
+assert.equal(effectivePlan({ plan: "free", grandfathered: true }), "basic");
+assert.equal(effectivePlan({ plan: "grow", grandfathered: true }), "grow");
+assert.equal(effectivePlan({ plan: "bogus", grandfathered: false }), "free");
+
+const month = new Date().toISOString().slice(0, 7);
+const restock = () =>
+  notifyVariant({
+    shop: "s.myshopify.com",
+    variantId: "1",
+    productTitle: "Linen shirt",
+    variantTitle: "",
+    productUrl: "https://s.example/products/linen?variant=1",
+    imageUrl: null,
+    shopName: "Linen & Co",
+    shopContactEmail: null,
+  });
+const freshSettings = (extra) => ({
+  shop: "s.myshopify.com",
+  plan: "free",
+  grandfathered: false,
+  planCheckedAt: new Date(),
+  usageMonth: month,
+  usageCount: 0,
+  emailSubject: "Custom {{product}}",
+  fromName: "Custom Sender",
+  renotify: false,
+  emailHeading: "Guess who's back: {{product}}",
+  emailBody: "",
+  emailButton: "",
+  emailButtonColor: "",
+  emailLogoUrl: "",
+  ...extra,
+});
+
+// Free: one email left this month, so the second shopper waits; defaults and branding apply.
+settings = freshSettings({ usageCount: 49 });
+rows = [
+  { id: "f1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("f1@x.co"), status: "PENDING" },
+  { id: "f2", shop: "s.myshopify.com", variantId: "1", ...sealEmail("f2@x.co"), status: "PENDING" },
+];
+sent.length = 0;
+assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 1 });
+assert.equal(settings.usageCount, 50);
+assert.deepEqual(rows.map((r) => r.status).sort(), ["PENDING", "SENT"]);
+assert.equal(sent[0].subject, "Linen shirt is back in stock");
+assert.equal(sent[0].from, '"Linen & Co" <alerts@example.com>');
+assert.match(sent[0].html, /Sent with <a href="https:\/\/backsoon/);
+assert.match(sent[0].html, /Linen shirt is back in stock/);
+// The Shop now link goes through the click tracker.
+const sentId = rows.find((r) => r.status === "SENT").id;
+assert.ok(sent[0].html.includes(trackedUrl(sentId, "https://s.example/products/linen?variant=1").replace(/&/g, "&amp;")));
+
+// Last month's count doesn't carry over.
+settings = freshSettings({ usageMonth: "2000-01", usageCount: 50 });
+rows = [{ id: "m1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("m1@x.co"), status: "PENDING" }];
+assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 0 });
+assert.equal(settings.usageMonth, month);
+assert.equal(settings.usageCount, 1);
+
+// Basic: custom subject and sender, no branding, default template.
+settings = freshSettings({ plan: "basic" });
+rows = [{ id: "b1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("b1@x.co"), status: "PENDING" }];
+sent.length = 0;
+await restock();
+assert.equal(sent[0].subject, "Custom Linen shirt");
+assert.equal(sent[0].from, '"Custom Sender" <alerts@example.com>');
+assert.doesNotMatch(sent[0].html, /Sent with/);
+assert.doesNotMatch(sent[0].html, /Guess who/);
+
+// Grow + re-notify: emailed shoppers hear again, but not twice in a day; template applies.
+settings = freshSettings({ plan: "grow", renotify: true });
+rows = [
+  { id: "g1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g1@x.co"), status: "SENT", sentAt: ago(3) },
+  { id: "g2", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g2@x.co"), status: "SENT", sentAt: new Date() },
+  { id: "g3", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g3@x.co"), status: "UNSUBSCRIBED" },
+];
+sent.length = 0;
+assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 0 });
+assert.equal(sent[0].to[0], "g1@x.co");
+assert.match(sent[0].html, /Guess who&#39;s back: Linen shirt/);
+assert.match(sent[0].html, /each time this item is restocked/);
+// Re-notify off: SENT rows are left alone.
+settings = freshSettings({ plan: "grow" });
+rows[0].sentAt = ago(3);
+assert.deepEqual(await restock(), { sent: 0, failed: 0, held: 0 });
+
+// Click tracker: a signed link records the click and redirects; a tampered one 404s.
+rows = [{ id: "k1", clickedAt: null }];
+const click = (url) => clickLoader({ params: { id: "k1" }, request: new Request(url) });
+const link = trackedUrl("k1", "https://s.example/p?variant=1");
+const ok = await click(link);
+assert.equal(ok.status, 302);
+assert.equal(ok.headers.get("location"), "https://s.example/p?variant=1");
+assert.ok(rows[0].clickedAt instanceof Date);
+const forged = link.replace(encodeURIComponent("https://s.example"), encodeURIComponent("https://evil.example"));
+assert.equal((await click(forged)).status, 404);
+
+console.log("ok: notify.server, CSV export, retention, encryption, customer sync, product links, plans and click tracking");

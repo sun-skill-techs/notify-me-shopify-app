@@ -10,6 +10,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendTestEmail } from "../notify.server";
+import { renderEmail, TEMPLATE_DEFAULTS, type EmailTemplate } from "../email";
+import { effectivePlan } from "../plans.server";
+import { atLeast } from "../plans";
+
+const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFAULTS) as (keyof EmailTemplate)[];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -21,7 +26,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   const { data } = await shopRes.json();
 
+  const plan = effectivePlan(settings);
   return {
+    basic: atLeast(plan, "basic"),
+    grow: atLeast(plan, "grow"),
+    template: Object.fromEntries(
+      TEMPLATE_KEYS.map((k) => [k, settings?.[k] ?? ""]),
+    ) as EmailTemplate,
+    renotify: settings?.renotify ?? false,
     fromName: settings?.fromName ?? "",
     emailSubject: settings?.emailSubject ?? "{{product}} is back in stock",
     testSentAt: settings?.testSentAt?.toISOString() ?? null,
@@ -39,14 +51,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent");
 
   if (intent === "save") {
-    const fromName = String(form.get("fromName") ?? "").trim().slice(0, 80);
-    const emailSubject =
-      String(form.get("emailSubject") ?? "").trim().slice(0, 200) ||
-      "{{product}} is back in stock";
+    const plan = effectivePlan(await db.shopSettings.findUnique({ where: { shop } }));
+    const text = (key: string, max: number) => String(form.get(key) ?? "").trim().slice(0, max);
+    const data: Record<string, string | boolean> = {};
+    // Plan features are enforced here too, not just greyed out in the form.
+    if (atLeast(plan, "basic")) {
+      data.fromName = text("fromName", 80);
+      data.emailSubject = text("emailSubject", 200) || "{{product}} is back in stock";
+    }
+    if (atLeast(plan, "grow")) {
+      data.emailHeading = text("emailHeading", 200);
+      data.emailBody = text("emailBody", 1000);
+      data.emailButton = text("emailButton", 40);
+      const color = text("emailButtonColor", 7);
+      data.emailButtonColor = /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "";
+      const logo = text("emailLogoUrl", 500);
+      if (logo && !/^https:\/\/\S+$/i.test(logo)) {
+        return { ok: false, message: "Logo URL must start with https://" };
+      }
+      data.emailLogoUrl = logo;
+      data.renotify = form.get("renotify") === "true";
+    }
     await db.shopSettings.upsert({
       where: { shop },
-      create: { shop, fromName, emailSubject },
-      update: { fromName, emailSubject },
+      create: { shop, ...data },
+      update: data,
     });
     return { ok: true, message: "Settings saved" };
   }
@@ -76,7 +105,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { ok: false, message: "Unknown action" };
 };
 
-type FieldEvent = { currentTarget: { value: string } };
+type FieldEvent = { currentTarget: { value: string; checked?: boolean } };
+
+function Upgrade({ plan, children }: { plan: string; children: React.ReactNode }) {
+  return (
+    <s-banner tone="info">
+      <s-stack direction="block" gap="small-200">
+        <s-text>{children}</s-text>
+        <s-button href="/app/plans">Upgrade to {plan}</s-button>
+      </s-stack>
+    </s-banner>
+  );
+}
 
 export default function SettingsPage() {
   const data = useLoaderData<typeof loader>();
@@ -85,11 +125,18 @@ export default function SettingsPage() {
 
   const [fromName, setFromName] = useState(data.fromName);
   const [emailSubject, setEmailSubject] = useState(data.emailSubject);
+  const [template, setTemplate] = useState(data.template);
+  const [renotify, setRenotify] = useState(data.renotify);
   const [testTo, setTestTo] = useState(data.shopEmail);
 
   const busy = fetcher.state !== "idle";
   const dirty =
-    fromName !== data.fromName || emailSubject !== data.emailSubject;
+    fromName !== data.fromName ||
+    emailSubject !== data.emailSubject ||
+    renotify !== data.renotify ||
+    TEMPLATE_KEYS.some((k) => template[k] !== data.template[k]);
+  const setField = (key: keyof EmailTemplate) => (e: FieldEvent) =>
+    setTemplate((t) => ({ ...t, [key]: e.currentTarget.value }));
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
@@ -98,7 +145,10 @@ export default function SettingsPage() {
   }, [fetcher.state, fetcher.data, shopify]);
 
   const save = () =>
-    fetcher.submit({ intent: "save", fromName, emailSubject }, { method: "post" });
+    fetcher.submit(
+      { intent: "save", fromName, emailSubject, ...template, renotify: String(renotify) },
+      { method: "post" },
+    );
   const test = () =>
     fetcher.submit({ intent: "test", to: testTo }, { method: "post" });
 
@@ -106,6 +156,17 @@ export default function SettingsPage() {
   // With no sender name saved, emails use the store name (see sender() in notify.server).
   const previewName = fromName || data.shopName;
   const previewFrom = previewName ? `${previewName} <${data.fromAddress}>` : data.fromAddress;
+  const previewHtml = renderEmail({
+    productTitle: "Linen shirt",
+    variantTitle: "Medium / Sand",
+    productUrl: "#",
+    imageUrl: null,
+    storeName: previewName || "Your store",
+    unsubscribeUrl: "#",
+    template: data.grow ? template : undefined,
+    branded: !data.basic,
+    repeat: data.grow && renotify,
+  });
 
   return (
     <s-page heading="Email settings">
@@ -123,11 +184,18 @@ export default function SettingsPage() {
 
       <s-section heading="Sender and subject">
         <s-stack direction="block" gap="base">
+          {!data.basic && (
+            <Upgrade plan="Basic">
+              Set your own sender name and subject line, and remove the
+              &ldquo;Sent with BackSoon&rdquo; line, on the Basic plan.
+            </Upgrade>
+          )}
           <s-text-field
             label="Sender name"
             name="fromName"
             value={fromName}
             placeholder={data.shopName}
+            disabled={!data.basic}
             details="Shown as the 'From' name in the shopper's inbox."
             onInput={(e: FieldEvent) => setFromName(e.currentTarget.value)}
           />
@@ -135,6 +203,7 @@ export default function SettingsPage() {
             label="Subject line"
             name="emailSubject"
             value={emailSubject}
+            disabled={!data.basic}
             details="Use {{product}} where the product title should go."
             onInput={(e: FieldEvent) => setEmailSubject(e.currentTarget.value)}
           />
@@ -151,6 +220,70 @@ export default function SettingsPage() {
               <s-text color="subdued">{previewFrom}</s-text>
             </s-stack>
           </s-box>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Email design">
+        <s-stack direction="block" gap="base">
+          {!data.grow && (
+            <Upgrade plan="Grow">
+              Change the heading, message, button and logo, and email shoppers
+              on every restock, on the Grow plan.
+            </Upgrade>
+          )}
+          <s-text-field
+            label="Heading"
+            value={template.emailHeading}
+            placeholder={TEMPLATE_DEFAULTS.emailHeading}
+            disabled={!data.grow}
+            details="Use {{product}} where the product title should go."
+            onInput={setField("emailHeading")}
+          />
+          <s-text-area
+            label="Message"
+            rows={3}
+            value={template.emailBody}
+            placeholder={TEMPLATE_DEFAULTS.emailBody}
+            disabled={!data.grow}
+            onInput={setField("emailBody")}
+          />
+          <s-grid gridTemplateColumns="1fr 1fr" gap="base">
+            <s-text-field
+              label="Button text"
+              value={template.emailButton}
+              placeholder={TEMPLATE_DEFAULTS.emailButton}
+              disabled={!data.grow}
+              onInput={setField("emailButton")}
+            />
+            <s-color-field
+              label="Button color"
+              value={template.emailButtonColor || TEMPLATE_DEFAULTS.emailButtonColor}
+              disabled={!data.grow}
+              onInput={setField("emailButtonColor")}
+              onChange={setField("emailButtonColor")}
+            />
+          </s-grid>
+          <s-url-field
+            label="Logo URL"
+            value={template.emailLogoUrl}
+            placeholder="https://cdn.shopify.com/.../logo.png"
+            disabled={!data.grow}
+            details="Shown instead of your store name at the top. Leave empty to use the name."
+            onInput={setField("emailLogoUrl")}
+          />
+          <s-switch
+            label="Email shoppers every time the item is restocked"
+            details="Off: one email per signup. On: shoppers hear about each restock until they unsubscribe, at most once a day."
+            checked={renotify}
+            disabled={!data.grow}
+            onChange={(e: FieldEvent) => setRenotify(Boolean(e.currentTarget.checked))}
+          />
+          <iframe
+            title="Email preview"
+            srcDoc={previewHtml}
+            sandbox=""
+            style={{ width: "100%", height: 560, border: "1px solid #e3e3e3", borderRadius: 8 }}
+          />
         </s-stack>
       </s-section>
 

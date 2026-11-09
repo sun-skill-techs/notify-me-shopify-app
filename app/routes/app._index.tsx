@@ -11,6 +11,32 @@ import db from "../db.server";
 import { activity } from "../activity.server";
 import { METAFIELD } from "../widget";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
+import { effectivePlan, emailsUsed } from "../plans.server";
+import { atLeast, PLANS } from "../plans";
+
+/** Grow analytics: clicks and orders credited to restock emails in the last `days`. */
+async function sales(shop: string, days: number) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const [clicks, revenue] = await Promise.all([
+    db.restockSubscription.count({ where: { shop, clickedAt: { gte: since } } }),
+    db.restockSubscription.groupBy({
+      by: ["orderCurrency"],
+      where: { shop, orderedAt: { gte: since } },
+      _count: { _all: true },
+      _sum: { orderValue: true },
+    }),
+  ]);
+  return {
+    clicks,
+    orders: revenue.reduce((n, r) => n + r._count._all, 0),
+    // One line per currency; a store selling in several shows each.
+    revenue: revenue.map((r) =>
+      new Intl.NumberFormat("en", { style: "currency", currency: r.orderCurrency ?? "USD" }).format(
+        Number(r._sum.orderValue ?? 0),
+      ),
+    ),
+  };
+}
 
 const DAYS = 30;
 
@@ -72,6 +98,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const count = (status: string) =>
     byStatus.find((r) => r.status === status)?._count._all ?? 0;
+  const plan = effectivePlan(settings);
 
   // Adds the block to the main product section in one click, no theme editing.
   const themeEditorUrl = `https://${shop}/admin/themes/current/editor?template=product&addAppBlockId=${process.env.SHOPIFY_API_KEY}/notify-me&target=mainSection`;
@@ -94,6 +121,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     setupDismissed: Boolean(settings?.setupDismissedAt),
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
+    plan: { id: plan, name: PLANS[plan].name, used: emailsUsed(settings), limit: PLANS[plan].emails },
+    sales: atLeast(plan, "grow") ? await sales(shop, DAYS) : null,
   };
 };
 
@@ -205,6 +234,8 @@ export default function Index() {
     setupDismissed,
     reviewDismissed,
     themeEditorUrl,
+    plan,
+    sales,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const reviewFetcher = useFetcher();
@@ -269,6 +300,7 @@ export default function Index() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const usage = plan.used / plan.limit;
   const attempted = sent + failed;
   const deliveryRate = attempted ? `${Math.round((sent / attempted) * 100)}%` : "—";
 
@@ -285,6 +317,30 @@ export default function Index() {
         Email settings
       </s-button>
       <style>{CHART_CSS + PROGRESS_CSS}</style>
+
+      {usage >= 0.8 && (
+        <s-banner
+          tone={usage >= 1 ? "critical" : "warning"}
+          heading={
+            usage >= 1
+              ? "Restock emails are paused for this month"
+              : "You're close to this month's email limit"
+          }
+        >
+          <s-paragraph>
+            {plan.used.toLocaleString()} of {plan.limit.toLocaleString()} emails used on the{" "}
+            {plan.name} plan.{" "}
+            {usage >= 1
+              ? "Shoppers stay on the waitlist and are emailed on the next restock once you upgrade or the month resets."
+              : "Upgrade to keep emails going out."}
+          </s-paragraph>
+          {plan.id !== "grow" && (
+            <s-button slot="secondary-actions" href="/app/plans">
+              Upgrade plan
+            </s-button>
+          )}
+        </s-banner>
+      )}
 
       {failed > 0 && (
         <s-banner tone="warning" heading="Some emails could not be delivered">
@@ -354,6 +410,51 @@ export default function Index() {
               </s-stack>
             </s-box>
           )}
+        </s-stack>
+      </s-section>
+
+      <s-section heading={`Sales from restock emails, last ${DAYS} days`}>
+        {sales ? (
+          <s-grid gridTemplateColumns="repeat(auto-fit, minmax(150px, 1fr))" gap="base">
+            <Stat label="Clicks" value={sales.clicks} note="Shoppers who opened the product" />
+            <Stat label="Orders" value={sales.orders} note="Within 7 days of the email" />
+            <Stat
+              label="Revenue"
+              value={sales.revenue.join(" + ") || "—"}
+              note="From the restocked items"
+            />
+          </s-grid>
+        ) : (
+          <s-stack direction="block" gap="small-200">
+            <s-text color="subdued">
+              See how many shoppers clicked through and what they bought, on the Grow plan.
+            </s-text>
+            <s-button href="/app/plans" icon="lock">
+              Upgrade to Grow
+            </s-button>
+          </s-stack>
+        )}
+      </s-section>
+
+      <s-section slot="aside" heading="Plan">
+        <s-stack direction="block" gap="small-200">
+          <s-text type="strong">{plan.name}</s-text>
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <s-text color="subdued">
+              {plan.used.toLocaleString()} / {plan.limit.toLocaleString()} emails this month
+            </s-text>
+            <div
+              role="progressbar"
+              aria-label="Emails used this month"
+              aria-valuemin={0}
+              aria-valuemax={plan.limit}
+              aria-valuenow={plan.used}
+              className="nm-progress"
+            >
+              <div style={{ width: `${Math.min(100, usage * 100)}%` }} />
+            </div>
+          </s-stack>
+          <s-link href="/app/plans">{plan.id === "grow" ? "Change plan" : "Upgrade"}</s-link>
         </s-stack>
       </s-section>
 

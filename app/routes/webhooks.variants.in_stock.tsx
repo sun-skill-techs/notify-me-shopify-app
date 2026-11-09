@@ -21,7 +21,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Shopify retries the webhook if we take longer than 5s, and a long waitlist
   // does. Respond now; notifyVariant claims each row so a retry can't double-send.
   void notifyVariant({ shop, ...variant })
-    .then((r) => console.log(`notify-me: ${r.sent} sent, ${r.failed} failed`))
+    .then((r) => console.log(`notify-me: ${r.sent} sent, ${r.failed} failed, ${r.held} held by plan limit`))
     .catch((e) => console.error("notify-me: notify failed", e));
 
   return new Response();

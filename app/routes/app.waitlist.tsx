@@ -11,6 +11,8 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { buyableVariant, notifyVariant } from "../notify.server";
 import { activity } from "../activity.server";
+import { shopPlan } from "../plans.server";
+import { atLeast } from "../plans";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
 
 const RANGES = [7, 30, 90];
@@ -119,7 +121,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // "my-store.myshopify.com" -> the store handle admin.shopify.com expects.
   const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
 
-  return { variants, totals, storeHandle, days, activity: await activity(session.shop, timezone, days) };
+  return {
+    variants,
+    totals,
+    storeHandle,
+    days,
+    activity: await activity(session.shop, timezone, days),
+    canExport: atLeast(await shopPlan(session.shop), "basic"),
+  };
 };
 
 // "Retry failed": put a variant's failed rows back in the queue and, if it is in
@@ -144,9 +153,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
   const r = await notifyVariant({ shop: session.shop, ...variant });
+  const held = r.held ? `, ${r.held} waiting for your plan's email allowance` : "";
   return {
     ok: r.failed === 0,
-    message: r.failed ? `${r.sent} sent, ${r.failed} failed again` : `${r.sent} sent`,
+    message: (r.failed ? `${r.sent} sent, ${r.failed} failed again` : `${r.sent} sent`) + held,
   };
 };
 
@@ -169,7 +179,7 @@ function Count({
 }
 
 /** Downloads the CSV through App Bridge's fetch so the request is authenticated. */
-function ExportButton() {
+function ExportButton({ allowed }: { allowed: boolean }) {
   const [busy, setBusy] = useState(false);
   const shopify = useAppBridge();
   const download = async () => {
@@ -190,6 +200,14 @@ function ExportButton() {
       setBusy(false);
     }
   };
+  // CSV export is a Basic feature.
+  if (!allowed) {
+    return (
+      <s-button slot="secondary-actions" icon="lock" href="/app/plans">
+        Export CSV (Basic plan)
+      </s-button>
+    );
+  }
   return (
     <s-button slot="secondary-actions" icon="export" onClick={download} disabled={busy}>
       Export CSV
@@ -198,7 +216,7 @@ function ExportButton() {
 }
 
 export default function WaitlistPage() {
-  const { variants, totals, storeHandle, days, activity } = useLoaderData<typeof loader>();
+  const { variants, totals, storeHandle, days, activity, canExport } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [, setSearchParams] = useSearchParams();
@@ -245,7 +263,7 @@ export default function WaitlistPage() {
 
   return (
     <s-page heading="Waitlist">
-      <ExportButton />
+      <ExportButton allowed={canExport} />
       <s-button slot="secondary-actions" href="/app" variant="secondary">
         Back to overview
       </s-button>

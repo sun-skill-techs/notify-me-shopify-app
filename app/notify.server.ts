@@ -2,6 +2,9 @@ import crypto from "node:crypto";
 import { Resend } from "resend";
 import db from "./db.server";
 import { decryptEmail } from "./crypto.server";
+import { countEmailSent, effectivePlan, emailsUsed, refreshPlan } from "./plans.server";
+import { atLeast, PLANS } from "./plans";
+import { renderEmail } from "./email";
 
 // Unsubscribe links are signed rather than stored: no extra token column, and the
 // link stays valid for the life of the row.
@@ -26,57 +29,14 @@ export function unsubscribeUrl(shop: string, id: string) {
   return `https://${shop}/apps/notify-me/unsubscribe?id=${id}&token=${unsubscribeToken(id)}`;
 }
 
-export type RestockEmail = {
-  productTitle: string;
-  variantTitle: string;
-  productUrl: string;
-  imageUrl: string | null;
-  storeName: string;
-  unsubscribeUrl: string;
-};
-
-// Table layout and inline styles: Gmail and Outlook drop <style> blocks and flex.
-export function renderEmail(e: RestockEmail) {
-  const title = escapeHtml(e.productTitle);
-  const variant = e.variantTitle ? escapeHtml(e.variantTitle) : "";
-  const image = e.imageUrl
-    ? `<tr><td style="padding:0 0 20px">
-         <a href="${e.productUrl}"><img src="${e.imageUrl}" width="240" alt="${title}" style="display:block;max-width:240px;border-radius:8px"></a>
-       </td></tr>`
-    : "";
-  return `<!doctype html>
-<html><body style="margin:0;padding:24px 16px;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background:#fff;border-radius:12px;padding:32px">
-  <tr><td style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6b7177;padding:0 0 12px">${escapeHtml(e.storeName)}</td></tr>
-  <tr><td style="font-size:22px;font-weight:600;line-height:1.3;padding:0 0 8px">${title} is back in stock</td></tr>
-  ${variant ? `<tr><td style="font-size:14px;color:#6b7177;padding:0 0 20px">${variant}</td></tr>` : `<tr><td style="padding:0 0 12px"></td></tr>`}
-  ${image}
-  <tr><td style="font-size:15px;line-height:1.5;padding:0 0 24px">You asked us to tell you when this came back. It's available now, and stock may not last long.</td></tr>
-  <tr><td style="padding:0 0 28px">
-    <a href="${e.productUrl}" style="display:inline-block;background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;padding:14px 24px;border-radius:8px;text-decoration:none">Shop now</a>
-  </td></tr>
-  <tr><td style="font-size:12px;line-height:1.5;color:#6b7177;border-top:1px solid #e3e3e3;padding:16px 0 0">
-    You'll only get this one email for this request. This is not a marketing list.
-    <a href="${e.unsubscribeUrl}" style="color:#6b7177">Unsubscribe</a>
-  </td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+// The Shop now link goes through the app first so the click is recorded
+// (routes/c.$id.tsx). Signed so the route can't be used as an open redirect.
+export function clickToken(id: string, url: string) {
+  return unsubscribeToken(`${id}\n${url}`);
 }
 
-function escapeHtml(s: string) {
-  return s.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      })[c]!,
-  );
+export function trackedUrl(id: string, url: string) {
+  return `${process.env.SHOPIFY_APP_URL}/c/${id}?u=${encodeURIComponent(url)}&t=${clickToken(id, url)}`;
 }
 
 // A display name goes inside a quoted-string, so it can't carry the characters
@@ -90,14 +50,20 @@ export function fromHeader(name: string, address: string) {
 export type ShopInfo = { shopName: string; shopContactEmail: string | null };
 
 async function sender(shop: string, info: ShopInfo, productTitle: string) {
-  const settings = await db.shopSettings.findUnique({ where: { shop } });
-  const subject = (settings?.emailSubject || "{{product}} is back in stock").replace(
+  // Sending runs from webhooks, where no merchant is around to refresh the plan,
+  // so a day-old plan is good enough here; the admin refreshes it every 5 minutes.
+  const { settings } = await refreshPlan(shop, { maxAgeMs: 24 * 60 * 60 * 1000 });
+  const plan = effectivePlan(settings);
+  // Subject and sender name are Basic features; Free sends the defaults.
+  const custom = atLeast(plan, "basic") ? settings : null;
+  const grow = atLeast(plan, "grow") ? settings : null;
+  const subject = (custom?.emailSubject || "{{product}} is back in stock").replace(
     "{{product}}",
     productTitle,
   );
   const from = process.env.RESEND_FROM || "onboarding@resend.dev";
   const storeName =
-    settings?.fromName || info.shopName || shop.replace(/\.myshopify\.com$/, "");
+    custom?.fromName || info.shopName || shop.replace(/\.myshopify\.com$/, "");
   return {
     resend: new Resend(process.env.RESEND_API_KEY),
     subject,
@@ -105,6 +71,13 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
     // Shoppers reply to the store, not to the app's shared sending address.
     replyTo: info.shopContactEmail || undefined,
     storeName,
+    look: {
+      template: grow ?? undefined,
+      branded: plan === "free",
+      repeat: Boolean(grow?.renotify),
+    },
+    limit: PLANS[plan].emails,
+    used: emailsUsed(settings),
   };
 }
 
@@ -112,17 +85,23 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
 // SENDING forever. After this long it's claimable again. If the crash came
 // after Resend accepted the email, that shopper gets it twice, which beats never.
 const STALE_SENDING_MS = 10 * 60 * 1000;
-const claimable = () => ({
+// Re-notify (Grow) also picks up shoppers already emailed, but not twice in a
+// day, so a variant flapping in and out of stock doesn't flood them.
+const RENOTIFY_GAP_MS = 24 * 60 * 60 * 1000;
+const claimable = (renotify = false) => ({
   OR: [
     { status: "PENDING" },
     { status: "SENDING", claimedAt: null },
     { status: "SENDING", claimedAt: { lt: new Date(Date.now() - STALE_SENDING_MS) } },
+    ...(renotify ? [{ status: "SENT", sentAt: { lt: new Date(Date.now() - RENOTIFY_GAP_MS) } }] : []),
   ],
 });
 
 /**
  * Email every pending subscriber for a variant and mark each row SENT or FAILED.
- * Caller has already confirmed the variant is actually available.
+ * Caller has already confirmed the variant is actually available. Once the
+ * plan's monthly allowance is used up the rest stay PENDING (counted as `held`)
+ * and go out on the variant's next restock.
  */
 export async function notifyVariant(opts: ShopInfo & {
   shop: string;
@@ -134,27 +113,34 @@ export async function notifyVariant(opts: ShopInfo & {
 }) {
   const { shop, variantId } = opts;
 
-  const pending = await db.restockSubscription.findMany({
-    where: { shop, variantId, ...claimable() },
-    select: { id: true, email: true },
-  });
-  if (pending.length === 0) return { sent: 0, failed: 0 };
-
-  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+  const { resend, subject, fromHeader, replyTo, storeName, look, limit, used } = await sender(
     shop,
     opts,
     opts.productTitle,
   );
 
+  const pending = await db.restockSubscription.findMany({
+    where: { shop, variantId, ...claimable(look.repeat) },
+    select: { id: true, email: true },
+  });
+  if (pending.length === 0) return { sent: 0, failed: 0, held: 0 };
+
   let sent = 0;
   let failed = 0;
+  let held = 0;
   // ponytail: sequential sends. Resend's free tier is 100/day, so a waitlist
   // large enough to need batching is already past this plan — add p-map if that changes.
   for (const sub of pending) {
+    // ponytail: the allowance is read once per restock, so two variants restocking
+    // at the same moment can overshoot it by a few emails.
+    if (used + sent >= limit) {
+      held++;
+      continue;
+    }
     // Shopify retries webhooks, so two handlers can race on the same variant.
     // Claiming the row first means only one of them ever emails this shopper.
     const { count } = await db.restockSubscription.updateMany({
-      where: { id: sub.id, ...claimable() },
+      where: { id: sub.id, ...claimable(look.repeat) },
       data: { status: "SENDING", claimedAt: new Date() },
     });
     if (count === 0) continue;
@@ -173,10 +159,11 @@ export async function notifyVariant(opts: ShopInfo & {
       html: renderEmail({
         productTitle: opts.productTitle,
         variantTitle: opts.variantTitle,
-        productUrl: opts.productUrl,
+        productUrl: trackedUrl(sub.id, opts.productUrl),
         imageUrl: opts.imageUrl,
         storeName,
         unsubscribeUrl: unsub,
+        ...look,
       }),
     });
 
@@ -193,15 +180,16 @@ export async function notifyVariant(opts: ShopInfo & {
         where: { id: sub.id },
         data: { status: "SENT", sentAt: new Date() },
       });
+      await countEmailSent(shop);
     }
   }
 
-  return { sent, failed };
+  return { sent, failed, held };
 }
 
 /** Send a sample restock email so the merchant can check delivery and branding. */
 export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
-  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+  const { resend, subject, fromHeader, replyTo, storeName, look } = await sender(
     shop,
     info,
     "Sample product",
@@ -218,6 +206,7 @@ export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
       imageUrl: null,
       storeName,
       unsubscribeUrl: `https://${shop}`,
+      ...look,
     }),
   });
   return error ? error.message : null;

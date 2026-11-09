@@ -10,7 +10,8 @@ embedded = true
 # read_products covers product/variant reads and the variants/in_stock webhook.
 # write_app_proxy is required to serve the storefront subscribe/unsubscribe endpoints.
 # read_customers/write_customers copy signup emails into the store's customers (App Store 5.1.5).
-scopes = "read_customers,read_products,write_app_proxy,write_customers"
+# read_orders lets the orders/create webhook credit sales to restock emails (Grow plan).
+scopes = "read_customers,read_orders,read_products,write_app_proxy,write_customers"
 
 [app_proxy]
 url = "https://backsoon.sunskilltech.com/proxy"
@@ -32,6 +33,11 @@ api_version = "2026-07"
   [[webhooks.subscriptions]]
   uri = "/webhooks/variants/in_stock"
   topics = [ "variants/in_stock" ]
+
+  # Grow analytics: matches orders to the restock email before them.
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = [ "orders/create" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"

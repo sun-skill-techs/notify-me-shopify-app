@@ -2,6 +2,7 @@
 // Uninstall and redact webhooks for a shop whose offline token has expired. The
 // app is already uninstalled, so Shopify rejects any token refresh: these
 // handlers must still answer 200 and clean up, or Shopify retries them to death.
+// Also: orders/create credits a sale to the restock email before it.
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
@@ -13,6 +14,7 @@ process.env.DATA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 const shop = "gone.myshopify.com";
 let sessions;
 const deleted = [];
+const credited = [];
 globalThis.prismaGlobal = {
   session: {
     count: async () => sessions.length,
@@ -21,7 +23,10 @@ globalThis.prismaGlobal = {
       sessions = sessions.filter((s) => s.shop !== where.shop);
     },
   },
-  restockSubscription: { deleteMany: async ({ where }) => deleted.push(["sub", where]) },
+  restockSubscription: {
+    deleteMany: async ({ where }) => deleted.push(["sub", where]),
+    updateMany: async (args) => (credited.push(args), { count: 1 }),
+  },
   shopSettings: { deleteMany: async ({ where }) => deleted.push(["settings", where]) },
 };
 // The token refresh an uninstalled shop gets.
@@ -55,6 +60,8 @@ const run = (action, request) =>
 const { action: uninstalled } = await import("./routes/webhooks.app.uninstalled.tsx");
 const { action: shopRedact } = await import("./routes/webhooks.shop.redact.tsx");
 const { action: customersRedact } = await import("./routes/webhooks.customers.redact.tsx");
+const { action: ordersCreate } = await import("./routes/webhooks.orders.create.tsx");
+const { emailHash } = await import("./crypto.server.ts");
 
 sessions = [
   {
@@ -83,5 +90,26 @@ assert.equal((await run(customersRedact, webhook("customers/redact", custBody)))
 sessions = [{ id: "s", shop }];
 assert.equal((await run(uninstalled, webhook("app/uninstalled", { id: 1 }, "wrong"))).status, 401);
 assert.equal(sessions.length, 1);
+
+// An order credits each variant line to that shopper's recent restock email, once.
+const order = {
+  id: 77,
+  email: "A@x.co",
+  currency: "EUR",
+  line_items: [
+    { variant_id: 5, price: "12.50", quantity: 2 },
+    { variant_id: null, price: "3.00", quantity: 1 },
+  ],
+};
+assert.equal((await run(ordersCreate, webhook("orders/create", order))).status, 200);
+assert.equal(credited.length, 1);
+const [{ where, data }] = credited;
+assert.equal(where.variantId, "5");
+assert.equal(where.emailHash, emailHash("a@x.co"));
+assert.equal(where.orderId, null);
+assert.ok(Date.now() - where.sentAt.gte.getTime() <= 7 * 86_400_000 + 1000);
+assert.equal(data.orderValue, "25.00");
+assert.equal(data.orderCurrency, "EUR");
+assert.equal(data.orderId, "77");
 
 console.log("webhooks.test: ok");

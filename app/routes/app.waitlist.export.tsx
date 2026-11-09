@@ -2,6 +2,8 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { decryptEmail } from "../crypto.server";
+import { shopPlan } from "../plans.server";
+import { atLeast } from "../plans";
 
 // Excel and Sheets run a cell starting with = + - @ (or tab/CR) as a formula, and
 // shopper emails are storefront input. A leading ' keeps it as text.
@@ -14,6 +16,9 @@ export const cell = (raw: string) => {
 // page with App Bridge's fetch so the session token comes along.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, sessionToken } = await authenticate.admin(request);
+  if (!atLeast(await shopPlan(session.shop), "basic")) {
+    return new Response("CSV export is on the Basic plan", { status: 403 });
+  }
 
   const rows = await db.restockSubscription.findMany({
     where: { shop: session.shop },

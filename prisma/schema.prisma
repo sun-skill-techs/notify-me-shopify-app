@@ -49,6 +49,14 @@ model RestockSubscription {
   // When a sender claimed the row (status SENDING); lets a stale claim be retried.
   claimedAt      DateTime?
   unsubscribedAt DateTime?
+  // First click on the email's Shop now link (routes/c.$id.tsx).
+  clickedAt      DateTime?
+  // An order for this variant by the same email within 7 days of the alert
+  // (routes/webhooks.orders.create.tsx). orderValue is that line's price x quantity.
+  orderId        String?
+  orderValue     Decimal?  @db.Decimal(12, 2)
+  orderCurrency  String?
+  orderedAt      DateTime?
 
   // One live request per shopper per variant; re-subscribing after a send reuses the row.
   @@unique([shop, variantId, emailHash])
@@ -62,6 +70,23 @@ model ShopSettings {
   testSentAt  DateTime?
   setupDismissedAt DateTime?
   reviewPromptDismissedAt DateTime?
+  // Billing (app/plans.server.ts): the Partner API plan, cached.
+  plan          String    @default("free")
+  planCheckedAt DateTime?
+  shopGid       String?
+  // Installed before paid plans launched: Basic stays free.
+  grandfathered Boolean   @default(false)
+  // Restock emails sent in usageMonth ("2026-11"), counted against the plan.
+  usageMonth    String    @default("")
+  usageCount    Int       @default(0)
+  // Grow: email every restock, not just the first.
+  renotify      Boolean   @default(false)
+  // Grow: email template. Empty means the built-in default.
+  emailHeading     String @default("")
+  emailBody        String @default("")
+  emailButton      String @default("")
+  emailButtonColor String @default("")
+  emailLogoUrl     String @default("")
   updatedAt   DateTime @updatedAt
 }
 
