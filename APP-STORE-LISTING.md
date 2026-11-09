@@ -29,13 +29,17 @@ When a variant sells out, BackSoon adds a "Notify me" button to the product page
 ```
 Notify me button appears only on sold-out variants, with a popup signup form
 One email per request when the variant is back, with a link straight to it
-See which variants shoppers are waiting for, and export the list as CSV
+See which variants shoppers are waiting for, and the sales restock emails made
 Style the button and popup to match your theme, no code editing
 Signups are added to your Shopify customers, tagged backsoon-waitlist
 ```
 
 ### Other listing fields
-- Pricing: Free.
+- Pricing: Recurring charge, with Free marked as the free plan. Plans are set under Pricing content (Shopify App Pricing). 14-day free trial on paid plans; Shopify stops a store that reinstalls from getting a fresh trial.
+  - **Free** $0: 50 restock emails a month, Notify me button and popup, waitlist and demand charts, emails carry a small "Sent with BackSoon" line.
+  - **Basic** $9/month: 1,000 emails a month, your own sender name and subject, no BackSoon line, Custom CSS, CSV export.
+  - **Grow** $19/month: 5,000 emails a month, everything in Basic, email design (heading, message, button, logo), an email on every restock, and clicks, orders and revenue from restock emails.
+  - Plan handles must contain "basic" or "grow" (for example `basic`, `grow-yearly`): the app reads the plan from the handle (`app/plans.server.ts`).
 - Category: Stock alerts (back in stock).
 - Languages: English.
 - Requirements: tick "Online Store sales channel". Add: "Needs an Online Store 2.0 theme (app blocks)."
@@ -57,6 +61,7 @@ The app now reads and writes the Customer object, so this form must be filled be
 
 - Protected customer data: yes. Reason: app functionality. The app adds emails that shoppers type into its storefront form to the store's customer list, as App Store requirement 5.1.5 asks.
 - Protected customer fields: email only. Not name, phone or address.
+- Orders (`read_orders`, `orders/create` webhook): reason "app functionality / analytics". The app compares the order email's keyed hash with waitlist rows to credit a sale to a restock email (Grow). Nothing is kept from orders that don't match.
 - Data protection questions: answer truthfully. What's true today:
   - The app only processes the minimum data it needs: email, variant and dates. Yes.
   - Merchants are told what is collected and why, in the privacy policy. Yes.
@@ -69,7 +74,7 @@ The app now reads and writes the Customer object, so this form must be filled be
 Paste this into "Testing instructions" after filling in the placeholders.
 
 ```
-BackSoon emails shoppers when a sold-out variant comes back in stock. No login or account is needed; the app is free.
+BackSoon emails shoppers when a sold-out variant comes back in stock. No login or account is needed. Plans: Free, Basic and Grow, picked on Shopify's plan page (Plans in the app menu). On a development store plans are free to pick, so try Grow to see every feature.
 
 Test store: <dev store URL>
 Storefront password: <password>
@@ -84,6 +89,7 @@ Sold-out product to use: <product name>, variant <variant name>
 7. The Unsubscribe link in the email opens a confirm page on the store. On a password-protected dev store, enter the storefront password first.
 
 Email settings > Send test sends a sample email to any address.
+Plans (app menu) opens the plan page. On Free, Email settings, Custom CSS and CSV export show what Basic and Grow unlock. On Grow, Email settings has the email design and "Email shoppers every time the item is restocked", and Home shows clicks, orders and revenue from restock emails.
 ```
 
 ### Screencast

@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
 import { PublicPage, publicStyles as styles } from "../../public-page";
+import { PLANS } from "../../plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -92,12 +93,41 @@ export default function App() {
             <div className={styles.card}>
               <h3>Privacy first</h3>
               <p>
-                Emails are encrypted, used once for the restock alert and never
+                Emails are encrypted, used only for restock alerts and never
                 for marketing.
               </p>
             </div>
           </div>
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2>Pricing</h2>
+        <div className={styles.grid}>
+          <div className={styles.card}>
+            <h3>Free</h3>
+            <p>
+              {PLANS.free.emails} restock emails a month, the Notify me button
+              and popup, and your waitlist.
+            </p>
+          </div>
+          <div className={styles.card}>
+            <h3>Basic, $9/month</h3>
+            <p>
+              {PLANS.basic.emails.toLocaleString("en")} emails a month, your own
+              sender name and subject, Custom CSS and CSV export.
+            </p>
+          </div>
+          <div className={styles.card}>
+            <h3>Grow, $19/month</h3>
+            <p>
+              {PLANS.grow.emails.toLocaleString("en")} emails a month, your own
+              email design, an email on every restock, and the sales your
+              emails bring in.
+            </p>
+          </div>
+        </div>
+        <p className={styles.note}>Paid plans start with a 14-day free trial.</p>
       </section>
     </PublicPage>
   );

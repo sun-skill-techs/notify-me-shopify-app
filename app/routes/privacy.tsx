@@ -28,22 +28,31 @@ export default function Privacy() {
             when they signed up, when we emailed them, and when they
             unsubscribed
           </li>
+          <li>when they first clicked the link in the restock email</li>
+          <li>
+            if they order that variant within 7 days of the email: the order
+            number, that item&apos;s value and the currency
+          </li>
         </ul>
         <p>
           From the merchant&apos;s store we store the settings they choose in
-          the app (sender name, email subject, widget design) and the access
-          token Shopify issues at install. The app reads product and variant
-          details and the store&apos;s name and contact email through
-          Shopify&apos;s API. It does not read orders. Its only use of the
-          store&apos;s customer records is adding signup emails to them,
-          described below.
+          the app (sender name, email subject, email design, widget design),
+          its BackSoon plan and how many emails it sent this month, and the
+          access token Shopify issues at install. The app reads product and
+          variant details and the store&apos;s name and contact email through
+          Shopify&apos;s API. It receives new orders only to match them to
+          restock emails, as above, and keeps nothing from orders that
+          don&apos;t match. Its only use of the store&apos;s customer records
+          is adding signup emails to them, described below.
         </p>
 
         <h2>How we use it</h2>
         <p>
           We use a shopper&apos;s email address for one purpose: sending the
-          restock email they asked for, once, when that variant is back in
-          stock. We never use it for marketing, never sell it, and never share
+          restock email they asked for when that variant is back in stock.
+          That is one email, or one each time it is restocked if the merchant
+          turns that on, until the shopper unsubscribes. Click and order
+          records only show the merchant how many sales the emails brought in. We never use it for marketing, never sell it, and never share
           it with other merchants. The merchant can see and export the waitlist
           for their own store. As Shopify requires, we also add the email
           address to that store&apos;s Shopify customer list, tagged

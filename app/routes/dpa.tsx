@@ -25,9 +25,9 @@ export default function Dpa() {
         <p>
           You are the controller of your shoppers&apos; personal data. We
           process it as your processor, only to run the app for your store:
-          storing back-in-stock requests, sending the one email each shopper
-          asked for, adding signups to your Shopify customer list, and showing
-          you your waitlist. We don&apos;t use it for anything else.
+          storing back-in-stock requests, sending the restock emails each
+          shopper asked for, adding signups to your Shopify customer list, and
+          showing you your waitlist and the sales the emails brought in. We don&apos;t use it for anything else.
         </p>
 
         <h2>Data processed</h2>
@@ -35,6 +35,11 @@ export default function Dpa() {
           <li>
             Shopper email addresses, the product and variant requested, and
             dates.
+          </li>
+          <li>
+            Whether the shopper clicked the restock email, and the order
+            number, item value and currency when they bought that variant
+            within 7 days of it.
           </li>
           <li>
             Your store&apos;s app settings and the access token Shopify issues
