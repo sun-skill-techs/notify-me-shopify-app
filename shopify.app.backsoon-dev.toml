@@ -30,9 +30,10 @@ api_version = "2026-07"
   topics = [ "variants/in_stock" ]
 
   # Grow analytics: matches orders to the restock email before them.
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/orders/create"
-  topics = [ "orders/create" ]
+  # Off in dev until BackSoon Dev has protected customer data access; prod toml keeps it.
+  # [[webhooks.subscriptions]]
+  # uri = "/webhooks/orders/create"
+  # topics = [ "orders/create" ]
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/customers/data_request"
