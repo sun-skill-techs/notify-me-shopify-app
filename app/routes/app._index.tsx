@@ -10,15 +10,17 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { activity } from "../activity.server";
 import { METAFIELD } from "../widget";
+import { emailsThisMonth } from "../notify.server";
+import { planFor } from "../plans";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
 
 const DAYS = 30;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session, admin, billing } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [shopRes, byStatus, demand, top, settings] = await Promise.all([
+  const [shopRes, byStatus, demand, top, settings, payments, used] = await Promise.all([
     admin.graphql(
       `#graphql
         query notifyMeHome($namespace: String!, $key: String!) {
@@ -45,8 +47,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       take: 5,
     }),
     db.shopSettings.findUnique({ where: { shop } }),
+    billing.check(),
+    emailsThisMonth(shop),
   ]);
   const { data } = await shopRes.json();
+  const plan = planFor(payments.appSubscriptions.map((s) => s.name));
 
   // Titles for the top five, so the chart reads as products, not IDs.
   const titles = new Map<string, { label: string; detail: string }>();
@@ -94,6 +99,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     setupDismissed: Boolean(settings?.setupDismissedAt),
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
+    plan: { name: plan.name, emails: plan.emails, used },
   };
 };
 
@@ -205,6 +211,7 @@ export default function Index() {
     setupDismissed,
     reviewDismissed,
     themeEditorUrl,
+    plan,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const reviewFetcher = useFetcher();
@@ -286,7 +293,27 @@ export default function Index() {
       </s-button>
       <style>{CHART_CSS + PROGRESS_CSS}</style>
 
-      {failed > 0 && (
+      {plan.used >= plan.emails ? (
+        <s-banner tone="critical" heading="This month's restock emails are used up">
+          <s-paragraph>
+            Your {plan.name} plan includes {plan.emails.toLocaleString()} a month. New
+            restock emails are held until you{" "}
+            <s-link href="/app/plans">upgrade</s-link> or the allowance resets on the 1st,
+            then sent with Retry on the waitlist.
+          </s-paragraph>
+        </s-banner>
+      ) : (
+        plan.used >= plan.emails * 0.8 && (
+          <s-banner tone="warning" heading="Running low on restock emails">
+            <s-paragraph>
+              {plan.used.toLocaleString()} of {plan.emails.toLocaleString()} sent this
+              month on the {plan.name} plan. <s-link href="/app/plans">See plans</s-link>
+            </s-paragraph>
+          </s-banner>
+        )
+      )}
+
+      {failed > 0 && plan.used < plan.emails && (
         <s-banner tone="warning" heading="Some emails could not be delivered">
           <s-paragraph>
             {failed.toLocaleString()} notification

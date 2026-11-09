@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { Resend } from "resend";
 import db from "./db.server";
 import { decryptEmail } from "./crypto.server";
+import { EMAIL_TEXT, sanitizeEmailText, type EmailText } from "./email-text";
+import { monthStart, planFor, type Plan } from "./plans";
+
+const LISTING_URL = "https://apps.shopify.com/restock-alerts-sun-skill-techs";
 
 // Unsubscribe links are signed rather than stored: no extra token column, and the
 // link stays valid for the life of the row.
@@ -33,10 +37,14 @@ export type RestockEmail = {
   imageUrl: string | null;
   storeName: string;
   unsubscribeUrl: string;
+  text?: EmailText;
+  /** Free plan: a small "Sent with BackSoon" line in the footer. */
+  branded?: boolean;
 };
 
 // Table layout and inline styles: Gmail and Outlook drop <style> blocks and flex.
 export function renderEmail(e: RestockEmail) {
+  const t = e.text ?? EMAIL_TEXT;
   const title = escapeHtml(e.productTitle);
   const variant = e.variantTitle ? escapeHtml(e.variantTitle) : "";
   const image = e.imageUrl
@@ -49,23 +57,24 @@ export function renderEmail(e: RestockEmail) {
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background:#fff;border-radius:12px;padding:32px">
   <tr><td style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6b7177;padding:0 0 12px">${escapeHtml(e.storeName)}</td></tr>
-  <tr><td style="font-size:22px;font-weight:600;line-height:1.3;padding:0 0 8px">${title} is back in stock</td></tr>
+  <tr><td style="font-size:22px;font-weight:600;line-height:1.3;padding:0 0 8px">${escapeHtml(t.heading).replaceAll("{{product}}", title)}</td></tr>
   ${variant ? `<tr><td style="font-size:14px;color:#6b7177;padding:0 0 20px">${variant}</td></tr>` : `<tr><td style="padding:0 0 12px"></td></tr>`}
   ${image}
-  <tr><td style="font-size:15px;line-height:1.5;padding:0 0 24px">You asked us to tell you when this came back. It's available now, and stock may not last long.</td></tr>
+  <tr><td style="font-size:15px;line-height:1.5;padding:0 0 24px">${escapeHtml(t.body)}</td></tr>
   <tr><td style="padding:0 0 28px">
-    <a href="${e.productUrl}" style="display:inline-block;background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;padding:14px 24px;border-radius:8px;text-decoration:none">Shop now</a>
+    <a href="${e.productUrl}" style="display:inline-block;background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;padding:14px 24px;border-radius:8px;text-decoration:none">${escapeHtml(t.button)}</a>
   </td></tr>
   <tr><td style="font-size:12px;line-height:1.5;color:#6b7177;border-top:1px solid #e3e3e3;padding:16px 0 0">
-    You'll only get this one email for this request. This is not a marketing list.
-    <a href="${e.unsubscribeUrl}" style="color:#6b7177">Unsubscribe</a>
+    ${escapeHtml(t.footer)}
+    <a href="${e.unsubscribeUrl}" style="color:#6b7177">${escapeHtml(t.unsubscribe)}</a>
   </td></tr>
+  ${e.branded ? `<tr><td style="font-size:11px;color:#9a9fa4;padding:12px 0 0">Sent with <a href="${LISTING_URL}" style="color:#9a9fa4">BackSoon</a></td></tr>` : ""}
 </table>
 </td></tr></table>
 </body></html>`;
 }
 
-function escapeHtml(s: string) {
+export function escapeHtml(s: string) {
   return s.replace(
     /[&<>"']/g,
     (c) =>
@@ -105,6 +114,7 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
     // Shoppers reply to the store, not to the app's shared sending address.
     replyTo: info.shopContactEmail || undefined,
     storeName,
+    text: sanitizeEmailText(settings?.emailText),
   };
 }
 
@@ -120,11 +130,21 @@ const claimable = () => ({
   ],
 });
 
+/** Restock emails this shop has sent since the 1st of the month. */
+export function emailsThisMonth(shop: string) {
+  return db.restockSubscription.count({
+    where: { shop, status: "SENT", sentAt: { gte: monthStart() } },
+  });
+}
+
 /**
  * Email every pending subscriber for a variant and mark each row SENT or FAILED.
+ * Rows past the plan's monthly limit are marked FAILED without sending, so
+ * "Retry failed" on the waitlist sends them after an upgrade.
  * Caller has already confirmed the variant is actually available.
  */
 export async function notifyVariant(opts: ShopInfo & {
+  plan: Plan;
   shop: string;
   variantId: string;
   productTitle: string;
@@ -138,9 +158,14 @@ export async function notifyVariant(opts: ShopInfo & {
     where: { shop, variantId, ...claimable() },
     select: { id: true, email: true },
   });
-  if (pending.length === 0) return { sent: 0, failed: 0 };
+  if (pending.length === 0) return { sent: 0, failed: 0, held: 0 };
 
-  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+  // ponytail: two variants restocking at the same moment can each see the same
+  // remaining allowance and overshoot by a few emails. Fine at these volumes.
+  let allowance = opts.plan.emails - (await emailsThisMonth(shop));
+  let held = 0;
+
+  const { resend, subject, fromHeader, replyTo, storeName, text } = await sender(
     shop,
     opts,
     opts.productTitle,
@@ -158,6 +183,16 @@ export async function notifyVariant(opts: ShopInfo & {
       data: { status: "SENDING", claimedAt: new Date() },
     });
     if (count === 0) continue;
+
+    if (allowance <= 0) {
+      held++;
+      await db.restockSubscription.update({
+        where: { id: sub.id },
+        data: { status: "FAILED" },
+      });
+      continue;
+    }
+    allowance--;
 
     const unsub = unsubscribeUrl(shop, sub.id);
     const { error } = await resend.emails.send({
@@ -177,6 +212,8 @@ export async function notifyVariant(opts: ShopInfo & {
         imageUrl: opts.imageUrl,
         storeName,
         unsubscribeUrl: unsub,
+        text,
+        branded: opts.plan.price === 0,
       }),
     });
 
@@ -196,12 +233,13 @@ export async function notifyVariant(opts: ShopInfo & {
     }
   }
 
-  return { sent, failed };
+  if (held) console.log(`notify-me: ${held} held for ${shop}, ${opts.plan.name} plan limit reached`);
+  return { sent, failed, held };
 }
 
 /** Send a sample restock email so the merchant can check delivery and branding. */
-export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
-  const { resend, subject, fromHeader, replyTo, storeName } = await sender(
+export async function sendTestEmail(shop: string, info: ShopInfo, to: string, branded: boolean) {
+  const { resend, subject, fromHeader, replyTo, storeName, text } = await sender(
     shop,
     info,
     "Sample product",
@@ -218,6 +256,8 @@ export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
       imageUrl: null,
       storeName,
       unsubscribeUrl: `https://${shop}`,
+      text,
+      branded,
     }),
   });
   return error ? error.message : null;
@@ -232,6 +272,7 @@ export async function buyableVariant(
     `#graphql
       query notifyMeVariant($id: ID!) {
         shop { name contactEmail primaryDomain { url } }
+        currentAppInstallation { activeSubscriptions { name } }
         productVariant(id: $id) {
           id
           title
@@ -261,6 +302,9 @@ export async function buyableVariant(
       null) as string | null,
     shopName: (data.shop?.name ?? "") as string,
     shopContactEmail: (data.shop?.contactEmail ?? null) as string | null,
+    plan: planFor(
+      (data.currentAppInstallation?.activeSubscriptions ?? []).map((s: { name: string }) => s.name),
+    ),
   };
 }
 

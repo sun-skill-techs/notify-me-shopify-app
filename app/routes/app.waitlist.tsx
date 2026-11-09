@@ -144,6 +144,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
   const r = await notifyVariant({ shop: session.shop, ...variant });
+  if (r.held) {
+    return {
+      ok: false,
+      message: `${r.sent} sent, ${r.held} on hold: your ${variant.plan.name} plan's monthly emails are used up. Upgrade under Plans.`,
+    };
+  }
   return {
     ok: r.failed === 0,
     message: r.failed ? `${r.sent} sent, ${r.failed} failed again` : `${r.sent} sent`,

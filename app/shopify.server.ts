@@ -3,10 +3,23 @@ import crypto from "node:crypto";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { PLANS, TRIAL_DAYS } from "./plans";
+
+const paid = (name: (typeof PLANS)[number]["name"]) => ({
+  trialDays: TRIAL_DAYS,
+  lineItems: [
+    {
+      amount: PLANS.find((p) => p.name === name)!.price,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days as const,
+    },
+  ],
+});
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -17,6 +30,8 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  // Keys are the subscription names Shopify shows the merchant; planFor() reads them back.
+  billing: { Starter: paid("Starter"), Growth: paid("Growth"), Pro: paid("Pro") },
   future: {
     expiringOfflineAccessTokens: true,
   },

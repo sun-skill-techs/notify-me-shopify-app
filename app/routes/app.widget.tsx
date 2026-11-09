@@ -16,6 +16,7 @@ import {
   toStyle,
   type WidgetSettings,
 } from "../widget";
+import { LANGUAGES } from "../languages";
 // The storefront block's own stylesheet, so the preview is the real thing.
 // Inlined via the loader: in dev the Shopify CLI proxy owns /extensions/*,
 // so linking the file by URL 404s and the preview renders unstyled.
@@ -132,6 +133,7 @@ const HEADING_SIZES: Preset[] = [
   ["Medium", { headingSize: 28 }],
   ["Large", { headingSize: 34 }],
 ];
+const TEXT_LANGUAGES: Preset[] = LANGUAGES.map((l) => [l.name, l.widget]);
 const POPUP_CORNERS: Preset[] = [
   ["Square", { popupRadius: 0 }],
   ["Slightly rounded", { popupRadius: 4 }],
@@ -233,6 +235,7 @@ export default function WidgetPage() {
     <s-stack direction="block" gap="base">
       <s-section heading="Text">
         <s-stack direction="block" gap="base">
+          {choose("Language", TEXT_LANGUAGES)}
           {text("buttonText", "Button label")}
           {choose("Letter case", BUTTON_CASES)}
           {toggle("buttonIcon", "Show bell icon")}
@@ -282,6 +285,7 @@ export default function WidgetPage() {
 
       <s-section heading="Signup form">
         <s-stack direction="block" gap="base">
+          {choose("Language", TEXT_LANGUAGES)}
           {text("eyebrow", "Label above product name", "Leave empty to hide.")}
           {text("heading", "Heading")}
           {text("subheading", "Subheading", "Leave empty to hide.")}

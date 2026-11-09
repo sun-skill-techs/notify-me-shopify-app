@@ -10,6 +10,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { sendTestEmail } from "../notify.server";
+import { EMAIL_TEXT, sanitizeEmailText, type EmailText } from "../email-text";
+import { LANGUAGES } from "../languages";
+import { planFor } from "../plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -24,6 +27,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     fromName: settings?.fromName ?? "",
     emailSubject: settings?.emailSubject ?? "{{product}} is back in stock",
+    emailText: sanitizeEmailText(settings?.emailText),
     testSentAt: settings?.testSentAt?.toISOString() ?? null,
     shopName: (data?.shop?.name as string) ?? "",
     shopEmail: (data?.shop?.email as string) ?? "",
@@ -33,7 +37,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session, admin, billing } = await authenticate.admin(request);
   const shop = session.shop;
   const form = await request.formData();
   const intent = form.get("intent");
@@ -43,10 +47,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const emailSubject =
       String(form.get("emailSubject") ?? "").trim().slice(0, 200) ||
       "{{product}} is back in stock";
+    let emailText: EmailText;
+    try {
+      emailText = sanitizeEmailText(JSON.parse(String(form.get("emailText") ?? "{}")));
+    } catch {
+      emailText = sanitizeEmailText(null);
+    }
     await db.shopSettings.upsert({
       where: { shop },
-      create: { shop, fromName, emailSubject },
-      update: { fromName, emailSubject },
+      create: { shop, fromName, emailSubject, emailText },
+      update: { fromName, emailSubject, emailText },
     });
     return { ok: true, message: "Settings saved" };
   }
@@ -59,10 +69,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopRes = await admin.graphql(`#graphql
       query notifyMeTestShop { shop { name contactEmail } }`);
     const { data } = await shopRes.json();
+    const { appSubscriptions } = await billing.check();
     const error = await sendTestEmail(
       shop,
       { shopName: data?.shop?.name ?? "", shopContactEmail: data?.shop?.contactEmail ?? null },
       to,
+      planFor(appSubscriptions.map((s) => s.name)).price === 0,
     );
     if (error) return { ok: false, message: `Could not send: ${error}` };
     await db.shopSettings.upsert({
@@ -85,11 +97,17 @@ export default function SettingsPage() {
 
   const [fromName, setFromName] = useState(data.fromName);
   const [emailSubject, setEmailSubject] = useState(data.emailSubject);
+  const [text, setText] = useState(data.emailText);
   const [testTo, setTestTo] = useState(data.shopEmail);
+
+  // After a save the loader re-runs; adopt its sanitized values (blanks become defaults).
+  useEffect(() => setText(data.emailText), [data.emailText]);
 
   const busy = fetcher.state !== "idle";
   const dirty =
-    fromName !== data.fromName || emailSubject !== data.emailSubject;
+    fromName !== data.fromName ||
+    emailSubject !== data.emailSubject ||
+    JSON.stringify(text) !== JSON.stringify(data.emailText);
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
@@ -98,7 +116,32 @@ export default function SettingsPage() {
   }, [fetcher.state, fetcher.data, shopify]);
 
   const save = () =>
-    fetcher.submit({ intent: "save", fromName, emailSubject }, { method: "post" });
+    fetcher.submit(
+      { intent: "save", fromName, emailSubject, emailText: JSON.stringify(text) },
+      { method: "post" },
+    );
+  // Matches the saved words against each language; anything edited shows as Custom.
+  const language = LANGUAGES.findIndex(
+    (l) => l.subject === emailSubject && JSON.stringify(l.email) === JSON.stringify(text),
+  );
+  const pickLanguage = (i: number) => {
+    const l = LANGUAGES[i];
+    if (!l) return;
+    setEmailSubject(l.subject);
+    setText(l.email);
+  };
+  const field = (key: keyof EmailText, label: string, details?: string) => (
+    <s-text-field
+      label={label}
+      value={text[key]}
+      placeholder={EMAIL_TEXT[key]}
+      details={details}
+      onInput={(e: FieldEvent) => {
+        const value = e.currentTarget.value;
+        setText((prev) => ({ ...prev, [key]: value }));
+      }}
+    />
+  );
   const test = () =>
     fetcher.submit({ intent: "test", to: testTo }, { method: "post" });
 
@@ -151,6 +194,46 @@ export default function SettingsPage() {
               <s-text color="subdued">{previewFrom}</s-text>
             </s-stack>
           </s-box>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Email text">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">
+            Pick your store&apos;s language to fill in the subject and every line
+            below, then edit any of them. Leave a field empty to use the English
+            default.
+          </s-paragraph>
+          <s-select
+            label="Language"
+            value={String(language)}
+            onChange={(e: FieldEvent) => pickLanguage(Number(e.currentTarget.value))}
+          >
+            {language < 0 && <s-option value="-1">Custom</s-option>}
+            {LANGUAGES.map((l, i) => (
+              <s-option key={l.name} value={String(i)}>
+                {l.name}
+              </s-option>
+            ))}
+          </s-select>
+          {field("heading", "Heading", "Use {{product}} where the product title should go.")}
+          {field("body", "Message")}
+          {field("button", "Button")}
+          {field("footer", "Footer note")}
+          {field("unsubscribe", "Unsubscribe link and button")}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Unsubscribe page">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">
+            Shown on your store when a shopper opens the unsubscribe link.
+          </s-paragraph>
+          {field("unsubHeading", "Heading")}
+          {field("unsubBody", "Message")}
+          {field("unsubDoneHeading", "Heading after unsubscribing")}
+          {field("unsubDoneBody", "Message after unsubscribing")}
+          {field("continueShopping", "Continue shopping link")}
         </s-stack>
       </s-section>
 

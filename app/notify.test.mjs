@@ -14,18 +14,21 @@ process.env.SHOPIFY_API_KEY = "test-key";
 
 // db.server reuses global.prismaGlobal outside production, so this fake stands in for Prisma.
 let rows = [];
+let settings = null;
 const matches = (row, where) =>
   Object.entries(where).every(([k, v]) => {
     if (k === "OR") return v.some((w) => matches(row, w));
     if (v && typeof v === "object" && "lt" in v) return row[k] != null && row[k] < v.lt;
+    if (v && typeof v === "object" && "gte" in v) return row[k] != null && row[k] >= v.gte;
     return v === null ? row[k] == null : row[k] === v;
   });
 globalThis.prismaGlobal = {
   session: { count: async () => 0 }, // shopify.server's session storage probes it at load
-  shopSettings: { findUnique: async () => null },
+  shopSettings: { findUnique: async () => settings },
   dataAccessLog: { deleteMany: async () => ({ count: 0 }) },
   restockSubscription: {
     findMany: async ({ where }) => rows.filter((r) => matches(r, where)),
+    count: async ({ where }) => rows.filter((r) => matches(r, where)).length,
     updateMany: async ({ where, data }) => {
       const hit = rows.filter((r) => matches(r, where));
       hit.forEach((r) => Object.assign(r, data));
@@ -60,9 +63,12 @@ globalThis.fetch = async (_url, init) => {
   });
 };
 
-const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer, buyableVariant } = await import(
+const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer, buyableVariant, renderEmail } = await import(
   "./notify.server.ts"
 );
+const { EMAIL_TEXT, sanitizeEmailText } = await import("./email-text.ts");
+const { PLANS, planFor, monthStart } = await import("./plans.ts");
+const [FREE, STARTER] = PLANS;
 const { cell } = await import("./routes/app.waitlist.export.tsx");
 const { purgeOldRecords } = await import("./retention.server.ts");
 const { encryptEmail, decryptEmail, emailHash, sealEmail, backfillEmails } = await import(
@@ -118,8 +124,9 @@ const result = await notifyVariant({
   imageUrl: null,
   shopName: "Linen & Co",
   shopContactEmail: "hello@linen.co",
+  plan: STARTER,
 });
-assert.deepEqual(result, { sent: 2, failed: 0 });
+assert.deepEqual(result, { sent: 2, failed: 0, held: 0 });
 assert.deepEqual(sent.map((e) => e.to[0]).sort(), ["a@x.co", "b@x.co"]);
 assert.equal(rows.find((r) => r.id === "c").status, "SENDING");
 
@@ -127,6 +134,56 @@ assert.equal(rows.find((r) => r.id === "c").status, "SENDING");
 assert.equal(sent[0].from, '"Linen & Co" <alerts@example.com>');
 assert.equal(sent[0].reply_to, "hello@linen.co");
 assert.equal(sent[0].headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
+
+// Email text: blanks and junk fall back to English; unknown keys are dropped.
+assert.deepEqual(sanitizeEmailText(null), EMAIL_TEXT);
+const es = sanitizeEmailText({ heading: "  ¡{{product}} ya está disponible!  ", button: "", evil: "x", body: 5 });
+assert.equal(es.heading, "¡{{product}} ya está disponible!");
+assert.equal(es.button, EMAIL_TEXT.button);
+assert.equal(es.body, EMAIL_TEXT.body);
+assert.ok(!("evil" in es));
+
+// The default email is unchanged; custom text is used and escaped, product included.
+const base = { productTitle: "Tee <b>", variantTitle: "", productUrl: "https://s.co/p", imageUrl: null, storeName: "S", unsubscribeUrl: "https://s.co/u" };
+assert.ok(renderEmail(base).includes("Tee &lt;b&gt; is back in stock"));
+const html = renderEmail({ ...base, text: { ...EMAIL_TEXT, heading: "¡{{product}} volvió! <script>", button: "Comprar", unsubscribe: "Darse de baja" } });
+assert.ok(html.includes("¡Tee &lt;b&gt; volvió! &lt;script&gt;"));
+assert.ok(html.includes(">Comprar</a>") && html.includes(">Darse de baja</a>"));
+assert.ok(!html.includes("Shop now") && !html.includes("<script>"));
+
+// A store's saved text reaches the real send.
+settings = { emailSubject: "{{product}} está de vuelta", fromName: "", emailText: { button: "Comprar ahora" } };
+sent.length = 0;
+rows = [{ id: "es", shop: "s.myshopify.com", variantId: "2", ...sealEmail("es@x.co"), status: "PENDING" }];
+await notifyVariant({ shop: "s.myshopify.com", variantId: "2", productTitle: "Camisa", variantTitle: "", productUrl: "https://s.co/p", imageUrl: null, shopName: "S", shopContactEmail: null, plan: STARTER });
+assert.equal(sent[0].subject, "Camisa está de vuelta");
+assert.ok(sent[0].html.includes(">Comprar ahora</a>"));
+settings = null;
+
+// Plans: no subscription is Free; a subscription's name picks its plan.
+assert.equal(planFor([]).name, "Free");
+assert.equal(planFor(["Growth"]).name, "Growth");
+assert.equal(planFor(["Something old"]).name, "Free");
+assert.deepEqual(monthStart(new Date("2026-11-09T15:00:00Z")), new Date("2026-11-01T00:00:00Z"));
+
+// Paid emails carry no branding; Free ones get the footer line.
+assert.ok(!sent[0].html.includes("Sent with"));
+assert.ok(renderEmail({ ...base, branded: true }).includes("Sent with <a"));
+
+// Monthly limit: with 49 of Free's 50 sent this month, one more goes out and the
+// rest are held as FAILED (so Retry sends them later). Last month's sends don't count.
+const lastMonth = new Date(monthStart().getTime() - 1000);
+rows = [
+  ...Array.from({ length: 49 }, (_, i) => ({ id: `s${i}`, shop: "f.myshopify.com", variantId: "x", status: "SENT", sentAt: new Date() })),
+  { id: "old", shop: "f.myshopify.com", variantId: "x", status: "SENT", sentAt: lastMonth },
+  ...["h1", "h2", "h3"].map((id) => ({ id, shop: "f.myshopify.com", variantId: "3", ...sealEmail(`${id}@x.co`), status: "PENDING" })),
+];
+sent.length = 0;
+const limited = await notifyVariant({ shop: "f.myshopify.com", variantId: "3", productTitle: "P", variantTitle: "", productUrl: "https://f.co/p", imageUrl: null, shopName: "F", shopContactEmail: null, plan: FREE });
+assert.deepEqual(limited, { sent: 1, failed: 0, held: 2 });
+assert.equal(sent.length, 1);
+assert.ok(sent[0].html.includes("Sent with"));
+assert.equal(rows.filter((r) => r.variantId === "3" && r.status === "FAILED").length, 2);
 
 // CSV cells that a spreadsheet would run as formulas are neutralised.
 assert.equal(cell('=HYPERLINK("//evil.co")@x.co'), `"'=HYPERLINK(""//evil.co"")@x.co"`);
@@ -185,9 +242,10 @@ await assert.rejects(
 );
 
 // Product link: falls back to the handle on a password-protected store; drafts are skipped.
-const variantAdmin = (product) => ({
+const variantAdmin = (product, subscriptions = []) => ({
   graphql: async () => Response.json({ data: {
     shop: { name: "S", contactEmail: null, primaryDomain: { url: "https://s.com" } },
+    currentAppInstallation: { activeSubscriptions: subscriptions.map((name) => ({ name })) },
     productVariant: { title: "Red", availableForSale: true, product: { title: "P", handle: "p", featuredMedia: null, ...product } },
   } }),
 });
@@ -195,5 +253,7 @@ const gid = "gid://shopify/ProductVariant/9";
 assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: null }), gid)).productUrl, "https://s.com/products/p?variant=9");
 assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: "https://s.com/x" }), gid)).productUrl, "https://s.com/x?variant=9");
 assert.equal(await buyableVariant(variantAdmin({ status: "DRAFT", onlineStoreUrl: null }), gid), null);
+assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: null }), gid)).plan.name, "Free");
+assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreUrl: null }, ["Growth"]), gid)).plan.emails, 3000);
 
 console.log("ok: notify.server, CSV export, retention, encryption, customer sync and product links");

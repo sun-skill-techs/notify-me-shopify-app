@@ -42,4 +42,16 @@ assert.equal(sanitize({ customCss: "a".repeat(20000) }).customCss.length, 10000)
 assert.ok(toStyle(s).includes("--notify-me-trigger-bg: #abcdef;"));
 assert.ok(!toStyle(s).includes("url("));
 
+// Every built-in language fills every line, keeps {{product}}, and survives
+// the save-time sanitizers unchanged (so the picker doesn't flip to Custom).
+const { LANGUAGES } = await import("./languages.ts");
+const { EMAIL_TEXT, sanitizeEmailText } = await import("./email-text.ts");
+for (const l of LANGUAGES) {
+  assert.deepEqual(Object.keys(l.email).sort(), Object.keys(EMAIL_TEXT).sort(), l.name);
+  assert.deepEqual(sanitizeEmailText(l.email), l.email, l.name);
+  const w = sanitize({ ...DEFAULTS, ...l.widget });
+  for (const [k, v] of Object.entries(l.widget)) assert.ok(v && w[k] === v, `${l.name} ${k}`);
+  assert.ok(l.subject.includes("{{product}}") && l.email.heading.includes("{{product}}"), l.name);
+}
+
 console.log("widget.test: ok");

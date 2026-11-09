@@ -62,6 +62,10 @@ model ShopSettings {
   testSentAt  DateTime?
   setupDismissedAt DateTime?
   reviewPromptDismissedAt DateTime?
+  // Shopper-facing email and unsubscribe page words; see app/email-text.ts.
+  emailText   Json?
+  // First time a paid plan was seen active; one free trial per shop.
+  trialUsedAt DateTime?
   updatedAt   DateTime @updatedAt
 }
 
