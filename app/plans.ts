@@ -1,11 +1,13 @@
-// Plan names and monthly restock-email allowances. Shared by the server and the
-// admin UI. Keep in step with the plans in the Partner Dashboard.
+// Plan names, monthly prices (USD) and restock-email allowances. Shared by the
+// server and the admin UI. Keep in step with the plans in the Partner Dashboard.
 export const PLANS = {
-  free: { name: "Free", emails: 50 },
-  starter: { name: "Starter", emails: 500 },
-  growth: { name: "Growth", emails: 3000 },
-  pro: { name: "Pro", emails: 15000 },
+  free: { name: "Free", price: 0, emails: 50 },
+  starter: { name: "Starter", price: 7.99, emails: 500 },
+  growth: { name: "Growth", price: 14.99, emails: 3000 },
+  pro: { name: "Pro", price: 29.99, emails: 15000 },
 } as const;
+
+export const TRIAL_DAYS = 7;
 
 export type PlanId = keyof typeof PLANS;
 
