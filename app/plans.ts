@@ -2,7 +2,7 @@
 // server and the admin UI. Keep in step with the plans in the Partner Dashboard.
 export const PLANS = {
   free: { name: "Free", price: 0, emails: 50 },
-  starter: { name: "Starter", price: 7.99, emails: 500 },
+  starter: { name: "Starter", price: 7.99, emails: 1000 },
   growth: { name: "Growth", price: 14.99, emails: 3000 },
   pro: { name: "Pro", price: 29.99, emails: 15000 },
 } as const;
