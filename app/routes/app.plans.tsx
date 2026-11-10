@@ -49,10 +49,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 // One line under each plan name: who it's for.
 const TAGLINES: Record<PlanId, string> = {
-  free: "Try BackSoon on a small catalog",
+  free: "For small catalogs",
   starter: "Make the emails your own",
-  growth: "Win back more sales on every restock",
-  pro: "For stores with big waitlists",
+  growth: "Win back more sales",
+  pro: "For high-volume stores",
 };
 
 export default function PlansPage() {
@@ -100,6 +100,7 @@ export default function PlansPage() {
         </s-stack>
       </s-section>
 
+      <div className="bs-plans">
       <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
         {(Object.keys(PLANS) as PlanId[]).map((id) => {
           const p = PLANS[id];
@@ -166,6 +167,7 @@ export default function PlansPage() {
           );
         })}
       </s-grid>
+      </div>
 
       <s-section>
         <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
@@ -190,9 +192,10 @@ export default function PlansPage() {
 }
 
 const PLANS_CSS = `
-  .bs-usage { height: 8px; max-width: 360px; border-radius: 4px; background: #e3e3e3; overflow: hidden; }
+  .bs-usage { height: 8px; border-radius: 4px; background: #e3e3e3; overflow: hidden; }
   .bs-usage__fill { height: 100%; border-radius: 4px; background: #29845a; transition: width 0.3s; }
   .bs-usage__fill--warn { background: #e51c00; }
+  .bs-plans { margin-block: 16px; }
   .bs-price { margin: 0; font-size: 28px; font-weight: 700; line-height: 32px; }
   .bs-price span { font-size: 14px; font-weight: 450; color: #616161; }
 `;
