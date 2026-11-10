@@ -3,9 +3,6 @@ import { Resend } from "resend";
 import db from "./db.server";
 import { decryptEmail } from "./crypto.server";
 import { EMAIL_TEXT, sanitizeEmailText, type EmailText } from "./email-text";
-import { monthStart, planFor, type Plan } from "./plans";
-
-const LISTING_URL = "https://apps.shopify.com/restock-alerts-sun-skill-techs";
 
 // Unsubscribe links are signed rather than stored: no extra token column, and the
 // link stays valid for the life of the row.
@@ -38,8 +35,6 @@ export type RestockEmail = {
   storeName: string;
   unsubscribeUrl: string;
   text?: EmailText;
-  /** Free plan: a small "Sent with BackSoon" line in the footer. */
-  branded?: boolean;
 };
 
 // Table layout and inline styles: Gmail and Outlook drop <style> blocks and flex.
@@ -68,7 +63,6 @@ export function renderEmail(e: RestockEmail) {
     ${escapeHtml(t.footer)}
     <a href="${e.unsubscribeUrl}" style="color:#6b7177">${escapeHtml(t.unsubscribe)}</a>
   </td></tr>
-  ${e.branded ? `<tr><td style="font-size:11px;color:#9a9fa4;padding:12px 0 0">Sent with <a href="${LISTING_URL}" style="color:#9a9fa4">BackSoon</a></td></tr>` : ""}
 </table>
 </td></tr></table>
 </body></html>`;
@@ -130,21 +124,11 @@ const claimable = () => ({
   ],
 });
 
-/** Restock emails this shop has sent since the 1st of the month. */
-export function emailsThisMonth(shop: string) {
-  return db.restockSubscription.count({
-    where: { shop, status: "SENT", sentAt: { gte: monthStart() } },
-  });
-}
-
 /**
  * Email every pending subscriber for a variant and mark each row SENT or FAILED.
- * Rows past the plan's monthly limit are marked FAILED without sending, so
- * "Retry failed" on the waitlist sends them after an upgrade.
  * Caller has already confirmed the variant is actually available.
  */
 export async function notifyVariant(opts: ShopInfo & {
-  plan: Plan;
   shop: string;
   variantId: string;
   productTitle: string;
@@ -158,12 +142,7 @@ export async function notifyVariant(opts: ShopInfo & {
     where: { shop, variantId, ...claimable() },
     select: { id: true, email: true },
   });
-  if (pending.length === 0) return { sent: 0, failed: 0, held: 0 };
-
-  // ponytail: two variants restocking at the same moment can each see the same
-  // remaining allowance and overshoot by a few emails. Fine at these volumes.
-  let allowance = opts.plan.emails - (await emailsThisMonth(shop));
-  let held = 0;
+  if (pending.length === 0) return { sent: 0, failed: 0 };
 
   const { resend, subject, fromHeader, replyTo, storeName, text } = await sender(
     shop,
@@ -184,16 +163,6 @@ export async function notifyVariant(opts: ShopInfo & {
     });
     if (count === 0) continue;
 
-    if (allowance <= 0) {
-      held++;
-      await db.restockSubscription.update({
-        where: { id: sub.id },
-        data: { status: "FAILED" },
-      });
-      continue;
-    }
-    allowance--;
-
     const unsub = unsubscribeUrl(shop, sub.id);
     const { error } = await resend.emails.send({
       from: fromHeader,
@@ -213,7 +182,6 @@ export async function notifyVariant(opts: ShopInfo & {
         storeName,
         unsubscribeUrl: unsub,
         text,
-        branded: opts.plan.price === 0,
       }),
     });
 
@@ -233,12 +201,11 @@ export async function notifyVariant(opts: ShopInfo & {
     }
   }
 
-  if (held) console.log(`notify-me: ${held} held for ${shop}, ${opts.plan.name} plan limit reached`);
-  return { sent, failed, held };
+  return { sent, failed };
 }
 
 /** Send a sample restock email so the merchant can check delivery and branding. */
-export async function sendTestEmail(shop: string, info: ShopInfo, to: string, branded: boolean) {
+export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
   const { resend, subject, fromHeader, replyTo, storeName, text } = await sender(
     shop,
     info,
@@ -257,7 +224,6 @@ export async function sendTestEmail(shop: string, info: ShopInfo, to: string, br
       storeName,
       unsubscribeUrl: `https://${shop}`,
       text,
-      branded,
     }),
   });
   return error ? error.message : null;
@@ -272,7 +238,6 @@ export async function buyableVariant(
     `#graphql
       query notifyMeVariant($id: ID!) {
         shop { name contactEmail primaryDomain { url } }
-        currentAppInstallation { activeSubscriptions { name } }
         productVariant(id: $id) {
           id
           title
@@ -302,9 +267,6 @@ export async function buyableVariant(
       null) as string | null,
     shopName: (data.shop?.name ?? "") as string,
     shopContactEmail: (data.shop?.contactEmail ?? null) as string | null,
-    plan: planFor(
-      (data.currentAppInstallation?.activeSubscriptions ?? []).map((s: { name: string }) => s.name),
-    ),
   };
 }
 

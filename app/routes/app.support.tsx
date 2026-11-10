@@ -27,10 +27,6 @@ const FAQ = [
     a: "Yes. Pick a language under Widget design and under Email settings to fill in every line, then edit any of them. Spanish, French, German, Dutch, Portuguese and Italian are built in, and you can type your own for any other language.",
   },
   {
-    q: "What happens when I reach my plan's monthly emails?",
-    a: "Shoppers can still sign up; nothing is lost. Restock emails past the limit are held. Upgrade under Plans (paid plans start with a 7-day free trial) or wait for the 1st of the month, then press Retry on the Waitlist page to send them.",
-  },
-  {
     q: "Can shoppers stop the emails?",
     a: "Yes. Every notification includes an unsubscribe link.",
   },

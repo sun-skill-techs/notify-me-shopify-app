@@ -12,7 +12,6 @@ import db from "../db.server";
 import { sendTestEmail } from "../notify.server";
 import { EMAIL_TEXT, sanitizeEmailText, type EmailText } from "../email-text";
 import { LANGUAGES } from "../languages";
-import { planFor } from "../plans";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -37,7 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin, billing } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const form = await request.formData();
   const intent = form.get("intent");
@@ -69,12 +68,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopRes = await admin.graphql(`#graphql
       query notifyMeTestShop { shop { name contactEmail } }`);
     const { data } = await shopRes.json();
-    const { appSubscriptions } = await billing.check();
     const error = await sendTestEmail(
       shop,
       { shopName: data?.shop?.name ?? "", shopContactEmail: data?.shop?.contactEmail ?? null },
       to,
-      planFor(appSubscriptions.map((s) => s.name)).price === 0,
     );
     if (error) return { ok: false, message: `Could not send: ${error}` };
     await db.shopSettings.upsert({

@@ -35,11 +35,7 @@ Signups are added to your Shopify customers, tagged backsoon-waitlist
 ```
 
 ### Other listing fields
-- Pricing: Free plan available. Billed through the Shopify Billing API (app/plans.ts), so enter the plans by hand under Pricing, matching the code:
-  - Free: $0. 50 restock emails a month. Every feature. Small "Sent with BackSoon" line in emails.
-  - Starter: $7.99/month, 7-day free trial. 500 restock emails a month. No BackSoon branding.
-  - Growth: $14.99/month, 7-day free trial. 3,000 restock emails a month. No BackSoon branding.
-  - Pro: $29.99/month, 7-day free trial. 15,000 restock emails a month. No BackSoon branding.
+- Pricing: Free.
 - Category: Stock alerts (back in stock).
 - Languages: English.
 - Requirements: tick "Online Store sales channel". Add: "Needs an Online Store 2.0 theme (app blocks)."
@@ -73,7 +69,7 @@ The app now reads and writes the Customer object, so this form must be filled be
 Paste this into "Testing instructions" after filling in the placeholders.
 
 ```
-BackSoon emails shoppers when a sold-out variant comes back in stock. No login or account is needed. There is a Free plan; paid plans are on the Plans page and bill as test charges on development stores, so you can approve one without being charged.
+BackSoon emails shoppers when a sold-out variant comes back in stock. No login or account is needed; the app is free.
 
 Test store: <dev store URL>
 Storefront password: <password>
