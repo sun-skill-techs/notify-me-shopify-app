@@ -71,9 +71,10 @@ globalThis.fetch = async (_url, init) => {
   });
 };
 
-const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer, buyableVariant } = await import(
+const { unsubscribeToken, verifyUnsubscribeToken, fromHeader, notifyVariant, syncCustomer, buyableVariant, renderEmail } = await import(
   "./notify.server.ts"
 );
+const { EMAIL_TEXT, sanitizeEmailText } = await import("./email-text.ts");
 const { cell } = await import("./routes/app.waitlist.export.tsx");
 const { purgeOldRecords } = await import("./retention.server.ts");
 const { encryptEmail, decryptEmail, emailHash, sealEmail, backfillEmails } = await import(
@@ -138,6 +139,31 @@ assert.equal(rows.find((r) => r.id === "c").status, "SENDING");
 assert.equal(sent[0].from, '"Linen & Co" <alerts@example.com>');
 assert.equal(sent[0].reply_to, "hello@linen.co");
 assert.equal(sent[0].headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
+
+// Email text: blanks and junk fall back to English; unknown keys are dropped.
+assert.deepEqual(sanitizeEmailText(null), EMAIL_TEXT);
+const es = sanitizeEmailText({ heading: "  ¡{{product}} ya está disponible!  ", button: "", evil: "x", body: 5 });
+assert.equal(es.heading, "¡{{product}} ya está disponible!");
+assert.equal(es.button, EMAIL_TEXT.button);
+assert.equal(es.body, EMAIL_TEXT.body);
+assert.ok(!("evil" in es));
+
+// The default email is unchanged; custom text is used and escaped, product included.
+const base = { productTitle: "Tee <b>", variantTitle: "", productUrl: "https://s.co/p", imageUrl: null, storeName: "S", unsubscribeUrl: "https://s.co/u" };
+assert.ok(renderEmail(base).includes("Tee &lt;b&gt; is back in stock"));
+const html = renderEmail({ ...base, text: { ...EMAIL_TEXT, heading: "¡{{product}} volvió! <script>", button: "Comprar", unsubscribe: "Darse de baja" } });
+assert.ok(html.includes("¡Tee &lt;b&gt; volvió! &lt;script&gt;"));
+assert.ok(html.includes(">Comprar</a>") && html.includes(">Darse de baja</a>"));
+assert.ok(!html.includes("Shop now") && !html.includes("<script>"));
+
+// A store's saved text reaches the real send.
+settings = { emailSubject: "{{product}} está de vuelta", fromName: "", emailText: { button: "Comprar ahora" } };
+sent.length = 0;
+rows = [{ id: "es", shop: "s.myshopify.com", variantId: "2", ...sealEmail("es@x.co"), status: "PENDING" }];
+await notifyVariant({ shop: "s.myshopify.com", variantId: "2", productTitle: "Camisa", variantTitle: "", productUrl: "https://s.co/p", imageUrl: null, shopName: "S", shopContactEmail: null });
+assert.equal(sent[0].subject, "Camisa está de vuelta");
+assert.ok(sent[0].html.includes(">Comprar ahora</a>"));
+settings = null;
 
 // CSV cells that a spreadsheet would run as formulas are neutralised.
 assert.equal(cell('=HYPERLINK("//evil.co")@x.co'), `"'=HYPERLINK(""//evil.co"")@x.co"`);
@@ -243,15 +269,12 @@ const freshSettings = (extra) => ({
   emailSubject: "Custom {{product}}",
   fromName: "Custom Sender",
   renotify: false,
-  emailHeading: "Guess who's back: {{product}}",
-  emailBody: "",
-  emailButton: "",
-  emailButtonColor: "",
+  emailButtonColor: "#ff0000",
   emailLogoUrl: "",
   ...extra,
 });
 
-// Free: one email left this month, so the second shopper waits; defaults and branding apply.
+// Free: one email left this month, so the second shopper waits; own subject, default sender, design and branding.
 settings = freshSettings({ usageCount: 49 });
 rows = [
   { id: "f1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("f1@x.co"), status: "PENDING" },
@@ -261,8 +284,9 @@ sent.length = 0;
 assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 1 });
 assert.equal(settings.usageCount, 50);
 assert.deepEqual(rows.map((r) => r.status).sort(), ["PENDING", "SENT"]);
-assert.equal(sent[0].subject, "Linen shirt is back in stock");
+assert.equal(sent[0].subject, "Custom Linen shirt");
 assert.equal(sent[0].from, '"Linen & Co" <alerts@example.com>');
+assert.doesNotMatch(sent[0].html, /#ff0000/);
 assert.match(sent[0].html, /Sent with <a href="https:\/\/backsoon/);
 assert.match(sent[0].html, /Linen shirt is back in stock/);
 // The Shop now link goes through the click tracker.
@@ -276,7 +300,7 @@ assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 0 });
 assert.equal(settings.usageMonth, month);
 assert.equal(settings.usageCount, 1);
 
-// Starter: custom subject and sender, no branding, default template.
+// Starter: custom sender, no branding, default design.
 settings = freshSettings({ plan: "starter" });
 rows = [{ id: "b1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("b1@x.co"), status: "PENDING" }];
 sent.length = 0;
@@ -284,9 +308,9 @@ await restock();
 assert.equal(sent[0].subject, "Custom Linen shirt");
 assert.equal(sent[0].from, '"Custom Sender" <alerts@example.com>');
 assert.doesNotMatch(sent[0].html, /Sent with/);
-assert.doesNotMatch(sent[0].html, /Guess who/);
+assert.doesNotMatch(sent[0].html, /#ff0000/);
 
-// Growth + re-notify: emailed shoppers hear again, but not twice in a day; template applies.
+// Growth + re-notify: emailed shoppers hear again, but not twice in a day; design applies.
 settings = freshSettings({ plan: "growth", renotify: true });
 rows = [
   { id: "g1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g1@x.co"), status: "SENT", sentAt: ago(3) },
@@ -296,8 +320,9 @@ rows = [
 sent.length = 0;
 assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 0 });
 assert.equal(sent[0].to[0], "g1@x.co");
-assert.match(sent[0].html, /Guess who&#39;s back: Linen shirt/);
-assert.match(sent[0].html, /each time this item is restocked/);
+assert.match(sent[0].html, /#ff0000/);
+// The one-email footer note would be wrong here, so it's left out.
+assert.doesNotMatch(sent[0].html, /only get this one email/);
 // Re-notify off: SENT rows are left alone.
 settings = freshSettings({ plan: "growth" });
 rows[0].sentAt = ago(3);

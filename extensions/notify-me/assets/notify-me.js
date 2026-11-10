@@ -197,3 +197,15 @@ if (document.readyState === "loading") {
   syncFromUrl();
 }
 window.addEventListener("popstate", syncFromUrl);
+
+// Horizon and other newer themes switch variants by rewriting ?variant= with
+// history.replaceState and only set the id input's value, so no change event
+// fires. History methods don't emit events either, so wrap them.
+for (const method of ["pushState", "replaceState"]) {
+  const original = history[method];
+  history[method] = function (...args) {
+    const result = original.apply(this, args);
+    syncFromUrl();
+    return result;
+  };
+}

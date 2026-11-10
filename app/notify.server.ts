@@ -5,6 +5,9 @@ import { decryptEmail } from "./crypto.server";
 import { countEmailSent, effectivePlan, emailsUsed, refreshPlan } from "./plans.server";
 import { atLeast, PLANS } from "./plans";
 import { renderEmail } from "./email";
+import { sanitizeEmailText } from "./email-text";
+
+export { renderEmail, escapeHtml } from "./email";
 
 // Unsubscribe links are signed rather than stored: no extra token column, and the
 // link stays valid for the life of the row.
@@ -54,10 +57,10 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
   // so a day-old plan is good enough here; the admin refreshes it every 5 minutes.
   const { settings } = await refreshPlan(shop, { maxAgeMs: 24 * 60 * 60 * 1000 });
   const plan = effectivePlan(settings);
-  // Subject and sender name are Starter features; Free sends the defaults.
+  // Sender name is a Starter feature; the subject and words are on every plan.
   const custom = atLeast(plan, "starter") ? settings : null;
   const grow = atLeast(plan, "growth") ? settings : null;
-  const subject = (custom?.emailSubject || "{{product}} is back in stock").replace(
+  const subject = (settings?.emailSubject || "{{product}} is back in stock").replace(
     "{{product}}",
     productTitle,
   );
@@ -78,6 +81,7 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
     },
     limit: PLANS[plan].emails,
     used: emailsUsed(settings),
+    text: sanitizeEmailText(settings?.emailText),
   };
 }
 
@@ -113,7 +117,7 @@ export async function notifyVariant(opts: ShopInfo & {
 }) {
   const { shop, variantId } = opts;
 
-  const { resend, subject, fromHeader, replyTo, storeName, look, limit, used } = await sender(
+  const { resend, subject, fromHeader, replyTo, storeName, look, limit, used, text } = await sender(
     shop,
     opts,
     opts.productTitle,
@@ -164,6 +168,7 @@ export async function notifyVariant(opts: ShopInfo & {
         storeName,
         unsubscribeUrl: unsub,
         ...look,
+        text,
       }),
     });
 
@@ -189,7 +194,7 @@ export async function notifyVariant(opts: ShopInfo & {
 
 /** Send a sample restock email so the merchant can check delivery and branding. */
 export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
-  const { resend, subject, fromHeader, replyTo, storeName, look } = await sender(
+  const { resend, subject, fromHeader, replyTo, storeName, look, text } = await sender(
     shop,
     info,
     "Sample product",
@@ -207,6 +212,7 @@ export async function sendTestEmail(shop: string, info: ShopInfo, to: string) {
       storeName,
       unsubscribeUrl: `https://${shop}`,
       ...look,
+      text,
     }),
   });
   return error ? error.message : null;

@@ -108,14 +108,14 @@ export default function App() {
             <h3>Free</h3>
             <p>
               {PLANS.free.emails} restock emails a month, the Notify me button
-              and popup, and your waitlist.
+              and popup, your waitlist, and emails in your language.
             </p>
           </div>
           <div className={styles.card}>
             <h3>Starter, $7.99/month</h3>
             <p>
               {PLANS.starter.emails.toLocaleString("en")} emails a month, your own
-              sender name and subject, Custom CSS and CSV export.
+              sender name, no BackSoon line, Custom CSS and CSV export.
             </p>
           </div>
           <div className={styles.card}>

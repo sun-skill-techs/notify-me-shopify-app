@@ -81,12 +81,13 @@ model ShopSettings {
   usageCount    Int       @default(0)
   // Growth: email every restock, not just the first.
   renotify      Boolean   @default(false)
-  // Growth: email template. Empty means the built-in default.
-  emailHeading     String @default("")
-  emailBody        String @default("")
-  emailButton      String @default("")
+  // Growth: email design. Empty means the built-in default.
   emailButtonColor String @default("")
   emailLogoUrl     String @default("")
+  // Shopper-facing email and unsubscribe page words; see app/email-text.ts.
+  emailText   Json?
+  // Unused: from the Billing API plans that were reverted (1d188b4). Kept so the schema matches prod.
+  trialUsedAt DateTime?
   updatedAt   DateTime @updatedAt
 }
 

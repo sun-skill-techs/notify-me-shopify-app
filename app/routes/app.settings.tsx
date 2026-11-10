@@ -13,6 +13,8 @@ import { sendTestEmail } from "../notify.server";
 import { renderEmail, TEMPLATE_DEFAULTS, type EmailTemplate } from "../email";
 import { effectivePlan } from "../plans.server";
 import { atLeast } from "../plans";
+import { EMAIL_TEXT, sanitizeEmailText, type EmailText } from "../email-text";
+import { LANGUAGES } from "../languages";
 
 const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFAULTS) as (keyof EmailTemplate)[];
 
@@ -36,6 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     renotify: settings?.renotify ?? false,
     fromName: settings?.fromName ?? "",
     emailSubject: settings?.emailSubject ?? "{{product}} is back in stock",
+    emailText: sanitizeEmailText(settings?.emailText),
     testSentAt: settings?.testSentAt?.toISOString() ?? null,
     shopName: (data?.shop?.name as string) ?? "",
     shopEmail: (data?.shop?.email as string) ?? "",
@@ -53,16 +56,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "save") {
     const plan = effectivePlan(await db.shopSettings.findUnique({ where: { shop } }));
     const text = (key: string, max: number) => String(form.get(key) ?? "").trim().slice(0, max);
-    const data: Record<string, string | boolean> = {};
-    // Plan features are enforced here too, not just greyed out in the form.
-    if (atLeast(plan, "starter")) {
-      data.fromName = text("fromName", 80);
-      data.emailSubject = text("emailSubject", 200) || "{{product}} is back in stock";
+    let emailText: EmailText;
+    try {
+      emailText = sanitizeEmailText(JSON.parse(String(form.get("emailText") ?? "{}")));
+    } catch {
+      emailText = sanitizeEmailText(null);
     }
+    // Words and language are on every plan, so any store can email in its own language.
+    const data: Record<string, string | boolean | EmailText> = {
+      emailSubject: text("emailSubject", 200) || "{{product}} is back in stock",
+      emailText,
+    };
+    // Plan features are enforced here too, not just greyed out in the form.
+    if (atLeast(plan, "starter")) data.fromName = text("fromName", 80);
     if (atLeast(plan, "growth")) {
-      data.emailHeading = text("emailHeading", 200);
-      data.emailBody = text("emailBody", 1000);
-      data.emailButton = text("emailButton", 40);
       const color = text("emailButtonColor", 7);
       data.emailButtonColor = /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "";
       const logo = text("emailLogoUrl", 500);
@@ -127,14 +134,19 @@ export default function SettingsPage() {
   const [emailSubject, setEmailSubject] = useState(data.emailSubject);
   const [template, setTemplate] = useState(data.template);
   const [renotify, setRenotify] = useState(data.renotify);
+  const [text, setText] = useState(data.emailText);
   const [testTo, setTestTo] = useState(data.shopEmail);
+
+  // After a save the loader re-runs; adopt its sanitized values (blanks become defaults).
+  useEffect(() => setText(data.emailText), [data.emailText]);
 
   const busy = fetcher.state !== "idle";
   const dirty =
     fromName !== data.fromName ||
     emailSubject !== data.emailSubject ||
     renotify !== data.renotify ||
-    TEMPLATE_KEYS.some((k) => template[k] !== data.template[k]);
+    TEMPLATE_KEYS.some((k) => template[k] !== data.template[k]) ||
+    JSON.stringify(text) !== JSON.stringify(data.emailText);
   const setField = (key: keyof EmailTemplate) => (e: FieldEvent) =>
     setTemplate((t) => ({ ...t, [key]: e.currentTarget.value }));
 
@@ -146,9 +158,38 @@ export default function SettingsPage() {
 
   const save = () =>
     fetcher.submit(
-      { intent: "save", fromName, emailSubject, ...template, renotify: String(renotify) },
+      {
+        intent: "save",
+        fromName,
+        emailSubject,
+        emailText: JSON.stringify(text),
+        ...template,
+        renotify: String(renotify),
+      },
       { method: "post" },
     );
+  // Matches the saved words against each language; anything edited shows as Custom.
+  const language = LANGUAGES.findIndex(
+    (l) => l.subject === emailSubject && JSON.stringify(l.email) === JSON.stringify(text),
+  );
+  const pickLanguage = (i: number) => {
+    const l = LANGUAGES[i];
+    if (!l) return;
+    setEmailSubject(l.subject);
+    setText(l.email);
+  };
+  const field = (key: keyof EmailText, label: string, details?: string) => (
+    <s-text-field
+      label={label}
+      value={text[key]}
+      placeholder={EMAIL_TEXT[key]}
+      details={details}
+      onInput={(e: FieldEvent) => {
+        const value = e.currentTarget.value;
+        setText((prev) => ({ ...prev, [key]: value }));
+      }}
+    />
+  );
   const test = () =>
     fetcher.submit({ intent: "test", to: testTo }, { method: "post" });
 
@@ -163,6 +204,7 @@ export default function SettingsPage() {
     imageUrl: null,
     storeName: previewName || "Your store",
     unsubscribeUrl: "#",
+    text,
     template: data.grow ? template : undefined,
     branded: !data.basic,
     repeat: data.grow && renotify,
@@ -186,8 +228,8 @@ export default function SettingsPage() {
         <s-stack direction="block" gap="base">
           {!data.basic && (
             <Upgrade plan="Starter">
-              Set your own sender name and subject line, and remove the
-              &ldquo;Sent with BackSoon&rdquo; line, on the Starter plan.
+              Set your own sender name and remove the &ldquo;Sent with
+              BackSoon&rdquo; line on the Starter plan.
             </Upgrade>
           )}
           <s-text-field
@@ -203,7 +245,6 @@ export default function SettingsPage() {
             label="Subject line"
             name="emailSubject"
             value={emailSubject}
-            disabled={!data.basic}
             details="Use {{product}} where the product title should go."
             onInput={(e: FieldEvent) => setEmailSubject(e.currentTarget.value)}
           />
@@ -223,46 +264,48 @@ export default function SettingsPage() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Email text">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">
+            Pick your store&apos;s language to fill in the subject and every line
+            below, then edit any of them. Leave a field empty to use the English
+            default.
+          </s-paragraph>
+          <s-select
+            label="Language"
+            value={String(language)}
+            onChange={(e: FieldEvent) => pickLanguage(Number(e.currentTarget.value))}
+          >
+            {language < 0 && <s-option value="-1">Custom</s-option>}
+            {LANGUAGES.map((l, i) => (
+              <s-option key={l.name} value={String(i)}>
+                {l.name}
+              </s-option>
+            ))}
+          </s-select>
+          {field("heading", "Heading", "Use {{product}} where the product title should go.")}
+          {field("body", "Message")}
+          {field("button", "Button")}
+          {field("footer", "Footer note")}
+          {field("unsubscribe", "Unsubscribe link and button")}
+        </s-stack>
+      </s-section>
+
       <s-section heading="Email design">
         <s-stack direction="block" gap="base">
           {!data.grow && (
             <Upgrade plan="Growth">
-              Change the heading, message, button and logo, and email shoppers
-              on every restock, on the Growth plan.
+              Change the button color and logo, and email shoppers on every
+              restock, on the Growth plan.
             </Upgrade>
           )}
-          <s-text-field
-            label="Heading"
-            value={template.emailHeading}
-            placeholder={TEMPLATE_DEFAULTS.emailHeading}
+          <s-color-field
+            label="Button color"
+            value={template.emailButtonColor || TEMPLATE_DEFAULTS.emailButtonColor}
             disabled={!data.grow}
-            details="Use {{product}} where the product title should go."
-            onInput={setField("emailHeading")}
+            onInput={setField("emailButtonColor")}
+            onChange={setField("emailButtonColor")}
           />
-          <s-text-area
-            label="Message"
-            rows={3}
-            value={template.emailBody}
-            placeholder={TEMPLATE_DEFAULTS.emailBody}
-            disabled={!data.grow}
-            onInput={setField("emailBody")}
-          />
-          <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-            <s-text-field
-              label="Button text"
-              value={template.emailButton}
-              placeholder={TEMPLATE_DEFAULTS.emailButton}
-              disabled={!data.grow}
-              onInput={setField("emailButton")}
-            />
-            <s-color-field
-              label="Button color"
-              value={template.emailButtonColor || TEMPLATE_DEFAULTS.emailButtonColor}
-              disabled={!data.grow}
-              onInput={setField("emailButtonColor")}
-              onChange={setField("emailButtonColor")}
-            />
-          </s-grid>
           <s-url-field
             label="Logo URL"
             value={template.emailLogoUrl}
@@ -284,6 +327,19 @@ export default function SettingsPage() {
             sandbox=""
             style={{ width: "100%", height: 560, border: "1px solid #e3e3e3", borderRadius: 8 }}
           />
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Unsubscribe page">
+        <s-stack direction="block" gap="base">
+          <s-paragraph color="subdued">
+            Shown on your store when a shopper opens the unsubscribe link.
+          </s-paragraph>
+          {field("unsubHeading", "Heading")}
+          {field("unsubBody", "Message")}
+          {field("unsubDoneHeading", "Heading after unsubscribing")}
+          {field("unsubDoneBody", "Message after unsubscribing")}
+          {field("continueShopping", "Continue shopping link")}
         </s-stack>
       </s-section>
 
