@@ -4,31 +4,22 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { effectivePlan, emailsUsed } from "../plans.server";
-import { PLANS, TRIAL_DAYS, type PlanId } from "../plans";
+import { PLANS, TRIAL_DAYS, atLeast, type PlanId } from "../plans";
 
-// What each plan adds over the one before. Keep in step with the atLeast() checks.
-const FEATURES: Record<PlanId, string[]> = {
-  free: [
-    "Notify me button and popup on sold-out products",
-    "Emails, popup and unsubscribe page in your language",
-    "Waitlist with demand charts",
-    "Small “Sent with BackSoon” line in emails",
-  ],
-  starter: [
-    "Everything in Free",
-    "Emails from your own sender name",
-    "No BackSoon line in emails",
-    "Custom CSS for the button and popup",
-    "Download your waitlist as CSV",
-  ],
-  growth: [
-    "Everything in Starter",
-    "Your logo and button color in emails",
-    "Email shoppers again on every restock",
-    "Clicks, orders and revenue from restock emails",
-  ],
-  pro: ["Everything in Growth", "Built for stores with big waitlists"],
-};
+// Every card lists every feature, ticked from the plan that unlocks it.
+// Keep in step with the atLeast() checks.
+const FEATURES: [string, PlanId][] = [
+  ["Notify me button & popup", "free"],
+  ["Emails in your language", "free"],
+  ["Waitlist & demand charts", "free"],
+  ["Your own sender name", "starter"],
+  ["No BackSoon branding", "starter"],
+  ["Custom CSS", "starter"],
+  ["Waitlist CSV export", "starter"],
+  ["Logo & button color", "growth"],
+  ["Email on every restock", "growth"],
+  ["Revenue tracking", "growth"],
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -119,16 +110,20 @@ export default function PlansPage() {
 
                   <s-divider />
 
-                  <s-unordered-list>
-                    <s-list-item>
-                      <s-text type="strong">
-                        {p.emails.toLocaleString("en")} restock emails a month
-                      </s-text>
-                    </s-list-item>
-                    {FEATURES[id].map((f) => (
-                      <s-list-item key={f}>{f}</s-list-item>
-                    ))}
-                  </s-unordered-list>
+                  <s-stack direction="block" gap="small-200">
+                    <s-text type="strong">
+                      {p.emails.toLocaleString("en")} emails a month
+                    </s-text>
+                    {FEATURES.map(([f, min]) => {
+                      const has = atLeast(id, min);
+                      return (
+                        <s-grid key={f} gridTemplateColumns="auto 1fr" gap="small-200">
+                          <s-icon type={has ? "check" : "x"} tone={has ? "success" : "neutral"} />
+                          <s-text color={has ? "base" : "subdued"}>{f}</s-text>
+                        </s-grid>
+                      );
+                    })}
+                  </s-stack>
                 </s-stack>
               </s-box>
             );
