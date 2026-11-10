@@ -191,12 +191,13 @@ document.addEventListener("change", (event) => {
   for (const root of targets?.length ? targets : roots()) syncVariant(root, variantId);
 });
 
-// In the theme editor, tell the app the block is placed, so Home's setup guide
-// ticks "Add the button" before the first shopper signs up. Once per page.
+// Tell the app the block is placed, so Home's setup guide ticks "Add the button"
+// before the first shopper signs up. Once per page, from the theme editor, or
+// from the live store until the app has heard it once (data-ping goes away).
 let seen = false;
 const markSeen = () => {
   const root = roots()[0];
-  if (seen || !window.Shopify?.designMode || !root) return;
+  if (seen || !root || !(window.Shopify?.designMode || "ping" in root.dataset)) return;
   seen = true;
   fetch(`${root.dataset.proxy}/seen`, { method: "POST" }).catch(() => {});
 };

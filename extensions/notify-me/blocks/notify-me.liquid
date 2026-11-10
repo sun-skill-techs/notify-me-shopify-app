@@ -44,6 +44,7 @@
     data-variant-id="{{ product.selected_or_first_available_variant.id }}"
     data-variant-availability="{{ variant_availability | strip }}"
     data-proxy="/apps/notify-me"
+    {% if app.metafields.notify_me.seen.value != true %}data-ping{% endif %}
     data-success-text="{{ w.successHeading | default: "You're on the list" | escape }}"
     data-invalid-text="{{ w.invalidText | default: 'Enter a valid email address.' | escape }}"
     data-error-text="{{ w.errorText | default: 'Something went wrong. Try again.' | escape }}"
