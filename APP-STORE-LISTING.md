@@ -39,7 +39,7 @@ Signups are added to your Shopify customers, tagged backsoon-waitlist
   - **Free** $0: 50 restock emails a month, Notify me button and popup, waitlist and demand charts, emails in any language with every line editable, emails carry a small "Sent with BackSoon" line.
   - **Starter** $7.99/month: 1,000 emails a month, your own sender name, no BackSoon line, Custom CSS, CSV export.
   - **Growth** $14.99/month: 3,000 emails a month, everything in Starter, email design (button color, logo), an email on every restock, and clicks, orders and revenue from restock emails.
-  - **Pro** $29.99/month: 15,000 emails a month, everything in Growth, priority support (answered first).
+  - **Pro** $29.99/month: 15,000 emails a month, everything in Growth.
   - Plan handles must contain "starter", "growth" or the word "pro" (for example `starter`, `growth-yearly`, `pro`): the app reads the plan from the handle (`app/plans.server.ts`).
 - Category: Stock alerts (back in stock).
 - Languages: English.

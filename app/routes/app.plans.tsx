@@ -19,7 +19,6 @@ const FEATURES: [string, PlanId][] = [
   ["Logo & button color", "growth"],
   ["Email on every restock", "growth"],
   ["Revenue tracking", "growth"],
-  ["Priority support", "pro"],
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
