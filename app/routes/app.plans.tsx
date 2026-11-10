@@ -8,26 +8,21 @@ import { PLANS, TRIAL_DAYS, type PlanId } from "../plans";
 
 // What each plan adds over the one before. Keep in step with the atLeast() checks.
 const FEATURES: Record<PlanId, string[]> = {
-  free: [
-    "Notify me button and popup",
-    "Emails, popup and unsubscribe page in your language",
-    "Waitlist with demand charts",
-    "Small “Sent with BackSoon” line in emails",
-  ],
+  free: ["Notify me button", "Emails in your language", "Waitlist and demand charts"],
   starter: [
     "Everything in Free",
     "Your own sender name",
-    "No BackSoon line in emails",
-    "Custom CSS for the button and popup",
+    "No BackSoon branding",
+    "Custom CSS",
     "Waitlist CSV export",
   ],
   growth: [
     "Everything in Starter",
-    "Email button color and your logo",
-    "Email shoppers on every restock",
-    "Clicks, orders and revenue from restock emails",
+    "Your logo and button color",
+    "Email on every restock",
+    "Sales from restock emails",
   ],
-  pro: ["Everything in Growth", "For stores with big waitlists"],
+  pro: ["Everything in Growth", "5× the emails of Growth"],
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -47,13 +42,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-// One line under each plan name: who it's for.
-const TAGLINES: Record<PlanId, string> = {
-  free: "For small catalogs",
-  starter: "Make the emails your own",
-  growth: "Win back more sales",
-  pro: "For high-volume stores",
-};
 
 export default function PlansPage() {
   const { current, used, grandfathered, url } = useLoaderData<typeof loader>();
@@ -101,92 +89,76 @@ export default function PlansPage() {
       </s-section>
 
       <div className="bs-plans">
-      <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
-        {(Object.keys(PLANS) as PlanId[]).map((id) => {
-          const p = PLANS[id];
-          const [first, ...rest] = FEATURES[id];
-          const base = first.startsWith("Everything") ? first : null;
-          const items = base ? rest : FEATURES[id];
-          const isCurrent = id === current;
-          return (
-            <s-section key={id}>
-              <s-stack direction="block" gap="base">
-                <s-stack direction="block" gap="small-200">
-                  <s-stack direction="inline" gap="small-200" alignItems="center">
-                    <s-heading>{p.name}</s-heading>
-                    {isCurrent ? (
-                      <s-badge tone="success">Current</s-badge>
-                    ) : (
-                      id === "growth" && <s-badge tone="info">Most popular</s-badge>
-                    )}
+        <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
+          {(Object.keys(PLANS) as PlanId[]).map((id) => {
+            const p = PLANS[id];
+            const [first, ...rest] = FEATURES[id];
+            const base = first.startsWith("Everything") ? first : null;
+            const items = base ? rest : FEATURES[id];
+            const isCurrent = id === current;
+            return (
+              <s-section key={id}>
+                <div className="bs-card">
+                  <s-stack direction="block" gap="small-300">
+                    <s-stack direction="inline" gap="small-200" alignItems="center">
+                      <s-heading>{p.name}</s-heading>
+                      {isCurrent ? (
+                        <s-badge tone="success">Current plan</s-badge>
+                      ) : (
+                        id === "growth" && <s-badge tone="info">Recommended</s-badge>
+                      )}
+                    </s-stack>
+                    <p className="bs-price">
+                      {p.price ? `$${p.price}` : "Free"}
+                      {p.price > 0 && <span>/month</span>}
+                    </p>
+                    <s-text color="subdued">
+                      {p.price ? `${TRIAL_DAYS}-day free trial` : "Free forever"}
+                    </s-text>
                   </s-stack>
-                  <s-text color="subdued">{TAGLINES[id]}</s-text>
-                </s-stack>
 
-                <s-stack direction="block" gap="small-100">
-                  <p className="bs-price">
-                    {p.price ? `$${p.price}` : "Free"}
-                    {p.price > 0 && <span> / month</span>}
-                  </p>
-                  <s-text color="subdued">
-                    {p.price ? `${TRIAL_DAYS}-day free trial` : "Free forever"}
-                  </s-text>
-                </s-stack>
+                  <div className="bs-quota">
+                    <s-text type="strong">{p.emails.toLocaleString("en")} emails</s-text>{" "}
+                    <s-text color="subdued">a month</s-text>
+                  </div>
 
-                {isCurrent ? (
-                  <s-button inlineSize="fill" disabled>
-                    Current plan
-                  </s-button>
-                ) : (
-                  <s-button
-                    href={url}
-                    target="_top"
-                    inlineSize="fill"
-                    variant={id === "growth" ? "primary" : "secondary"}
-                  >
-                    {plan.price < p.price ? `Upgrade to ${p.name}` : `Switch to ${p.name}`}
-                  </s-button>
-                )}
+                  <s-stack direction="block" gap="small-200">
+                    {base && <s-text type="strong">{base}, plus:</s-text>}
+                    {items.map((f) => (
+                      <s-grid key={f} gridTemplateColumns="auto 1fr" gap="small-200">
+                        <s-icon type="check" tone="success" />
+                        <s-text>{f}</s-text>
+                      </s-grid>
+                    ))}
+                  </s-stack>
 
-                <s-divider />
-
-                <s-stack direction="block" gap="small-200">
-                  <s-text type="strong">
-                    {p.emails.toLocaleString("en")} restock emails a month
-                  </s-text>
-                  {base && <s-text color="subdued">{base}, plus:</s-text>}
-                  {items.map((f) => (
-                    <s-grid key={f} gridTemplateColumns="auto 1fr" gap="small-200">
-                      <s-icon type="check" tone="success" />
-                      <s-text>{f}</s-text>
-                    </s-grid>
-                  ))}
-                </s-stack>
-              </s-stack>
-            </s-section>
-          );
-        })}
-      </s-grid>
+                  <div className="bs-cta">
+                    {isCurrent ? (
+                      <s-button inlineSize="fill" disabled>
+                        Current plan
+                      </s-button>
+                    ) : (
+                      <s-button
+                        href={url}
+                        target="_top"
+                        inlineSize="fill"
+                        variant={id === "growth" ? "primary" : "secondary"}
+                      >
+                        {plan.price < p.price ? `Upgrade to ${p.name}` : `Switch to ${p.name}`}
+                      </s-button>
+                    )}
+                  </div>
+                </div>
+              </s-section>
+            );
+          })}
+        </s-grid>
       </div>
 
-      <s-section>
-        <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
-          <s-stack direction="block" gap="small-100">
-            <s-text type="strong">Billed by Shopify</s-text>
-            <s-text color="subdued">Charges show on your Shopify invoice, in USD.</s-text>
-          </s-stack>
-          <s-stack direction="block" gap="small-100">
-            <s-text type="strong">Signups never capped</s-text>
-            <s-text color="subdued">
-              Shoppers can always join the waitlist. Plans only limit emails sent.
-            </s-text>
-          </s-stack>
-          <s-stack direction="block" gap="small-100">
-            <s-text type="strong">Change any time</s-text>
-            <s-text color="subdued">Upgrade, downgrade or cancel in one click.</s-text>
-          </s-stack>
-        </s-grid>
-      </s-section>
+      <s-text color="subdued">
+        Paid plans start with a {TRIAL_DAYS}-day free trial. Billed by Shopify in USD. Signups
+        are never capped. Change or cancel any time.
+      </s-text>
     </s-page>
   );
 }
@@ -196,8 +168,11 @@ const PLANS_CSS = `
   .bs-usage__fill { height: 100%; border-radius: 4px; background: #29845a; transition: width 0.3s; }
   .bs-usage__fill--warn { background: #e51c00; }
   .bs-plans { margin-block: 16px; }
-  .bs-price { margin: 0; font-size: 28px; font-weight: 700; line-height: 32px; }
-  .bs-price span { font-size: 14px; font-weight: 450; color: #616161; }
+  .bs-card { display: flex; flex-direction: column; gap: 16px; height: 100%; }
+  .bs-price { display: flex; align-items: baseline; gap: 4px; height: 36px; margin: 8px 0 0; font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.5px; }
+  .bs-price span { font-size: 14px; font-weight: 450; color: #616161; letter-spacing: 0; }
+  .bs-quota { padding: 10px 12px; border-radius: 8px; background: #f1f1f1; }
+  .bs-cta { margin-top: auto; padding-top: 4px; }
 `;
 
 export const headers: HeadersFunction = (headersArgs) => {
