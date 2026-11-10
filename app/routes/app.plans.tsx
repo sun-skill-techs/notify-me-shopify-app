@@ -10,10 +10,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Re-check the plan as soon as they're back in the app, not after the 5-minute cache.
   await db.shopSettings.updateMany({ where: { shop: session.shop }, data: { planCheckedAt: null } });
 
-  const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
   // The dev app has its own handle; set SHOPIFY_APP_HANDLE for it.
   const appHandle = process.env.SHOPIFY_APP_HANDLE || "restock-alerts-sun-skill-techs";
-  return { url: `https://admin.shopify.com/store/${storeHandle}/charges/${appHandle}/pricing_plans` };
+  // shopify://admin lets App Bridge switch admin pages without reloading the whole admin.
+  return { url: `shopify://admin/charges/${appHandle}/pricing_plans` };
 };
 
 // A loader redirect with target _top stalls on "Handling response" when the page is
