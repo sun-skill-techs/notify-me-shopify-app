@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, redirect, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -11,8 +11,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
   // Keep the cached plan fresh while the merchant is in the app (Shopify App
-  // Pricing sends no webhook on plan changes).
+  // Pricing sends no webhook on plan changes). Shopify adds plan_handle when it
+  // sends the merchant back after choosing a plan: check right away.
+  const url = new URL(request.url);
+  const chosePlan = url.searchParams.has("plan_handle");
   const { settings, refreshed } = await refreshPlan(session.shop, {
+    maxAgeMs: chosePlan ? 0 : undefined,
     getShopGid: async () => {
       const res = await admin.graphql(`#graphql
         query notifyMeShopId { shop { id } }`);
@@ -20,6 +24,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   });
   if (refreshed && effectivePlan(settings) === "free") await dropCustomCss(admin);
+  // The page loaded alongside this one read the old plan; load it again.
+  if (chosePlan) {
+    url.searchParams.delete("plan_handle");
+    throw redirect(url.pathname + url.search);
+  }
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

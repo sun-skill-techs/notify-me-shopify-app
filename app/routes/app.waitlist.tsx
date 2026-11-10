@@ -22,17 +22,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const requested = Number(new URL(request.url).searchParams.get("days"));
   const days = RANGES.includes(requested) ? requested : 30;
 
-  const shopResponse = await admin.graphql(
-    `#graphql
-      query notifyMeShopTimezone { shop { ianaTimezone } }`,
-  );
+  const [shopResponse, rows, plan] = await Promise.all([
+    admin.graphql(
+      `#graphql
+        query notifyMeShopTimezone { shop { ianaTimezone } }`,
+    ),
+    db.restockSubscription.groupBy({
+      by: ["variantId", "productId", "status"],
+      where: { shop: session.shop },
+      _count: { _all: true },
+    }),
+    shopPlan(session.shop),
+  ]);
   const timezone = (await shopResponse.json()).data?.shop?.ianaTimezone ?? "UTC";
-
-  const rows = await db.restockSubscription.groupBy({
-    by: ["variantId", "productId", "status"],
-    where: { shop: session.shop },
-    _count: { _all: true },
-  });
 
   // Roll the per-status counts up into one row per variant.
   const byVariant = new Map<
@@ -72,41 +74,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const variants = [...byVariant.values()].sort((a, b) => b.pending - a.pending);
 
   // Look up titles so the table reads as products, not IDs. nodes() caps at 250
-  // ids per call, so chunk well under it.
-  for (let i = 0; i < variants.length; i += 100) {
-    const chunk = variants.slice(i, i + 100);
-    const response = await admin.graphql(
-      `#graphql
-        query notifyMeWaitlistTitles($ids: [ID!]!) {
-          nodes(ids: $ids) {
-            ... on ProductVariant {
-              id
-              title
-              media(first: 1) { nodes { preview { image { url } } } }
-              product { title featuredMedia { preview { image { url } } } }
+  // ids per call, so chunk well under it. Runs alongside the activity query below.
+  const loadTitles = async () => {
+    for (let i = 0; i < variants.length; i += 100) {
+      const chunk = variants.slice(i, i + 100);
+      const response = await admin.graphql(
+        `#graphql
+          query notifyMeWaitlistTitles($ids: [ID!]!) {
+            nodes(ids: $ids) {
+              ... on ProductVariant {
+                id
+                title
+                media(first: 1) { nodes { preview { image { url } } } }
+                product { title featuredMedia { preview { image { url } } } }
+              }
             }
-          }
-        }`,
-      {
-        variables: {
-          ids: chunk.map((v) => `gid://shopify/ProductVariant/${v.variantId}`),
+          }`,
+        {
+          variables: {
+            ids: chunk.map((v) => `gid://shopify/ProductVariant/${v.variantId}`),
+          },
         },
-      },
-    );
-    const { data } = await response.json();
-    for (const node of data?.nodes ?? []) {
-      if (!node?.id) continue;
-      const target = byVariant.get(node.id.split("/").pop()!);
-      if (target) {
-        target.product = node.product?.title ?? "Product";
-        target.variant = node.title === "Default Title" ? "" : (node.title ?? "");
-        target.image =
-          node.media?.nodes?.[0]?.preview?.image?.url ??
-          node.product?.featuredMedia?.preview?.image?.url ??
-          null;
+      );
+      const { data } = await response.json();
+      for (const node of data?.nodes ?? []) {
+        if (!node?.id) continue;
+        const target = byVariant.get(node.id.split("/").pop()!);
+        if (target) {
+          target.product = node.product?.title ?? "Product";
+          target.variant = node.title === "Default Title" ? "" : (node.title ?? "");
+          target.image =
+            node.media?.nodes?.[0]?.preview?.image?.url ??
+            node.product?.featuredMedia?.preview?.image?.url ??
+            null;
+        }
       }
     }
-  }
+  };
+  const [, trend] = await Promise.all([loadTitles(), activity(session.shop, timezone, days)]);
 
   const totals = variants.reduce(
     (acc, v) => ({
@@ -126,8 +131,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totals,
     storeHandle,
     days,
-    activity: await activity(session.shop, timezone, days),
-    canExport: atLeast(await shopPlan(session.shop), "starter"),
+    activity: trend,
+    canExport: atLeast(plan, "starter"),
   };
 };
 

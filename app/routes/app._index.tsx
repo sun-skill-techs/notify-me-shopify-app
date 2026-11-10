@@ -74,9 +74,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
   const { data } = await shopRes.json();
 
+  const plan = effectivePlan(settings);
+
   // Titles for the top five, so the chart reads as products, not IDs.
   const titles = new Map<string, { label: string; detail: string }>();
-  if (top.length) {
+  const loadTitles = async () => {
+    if (!top.length) return;
     const res = await admin.graphql(
       `#graphql
         query notifyMeTopVariants($ids: [ID!]!) {
@@ -94,11 +97,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         detail: node.title === "Default Title" ? "" : (node.title ?? ""),
       });
     }
-  }
+  };
+  // Independent lookups, run together so the page isn't waiting on each in turn.
+  const [, trend, salesData] = await Promise.all([
+    loadTitles(),
+    activity(shop, data?.shop?.ianaTimezone ?? "UTC", DAYS),
+    atLeast(plan, "growth") ? sales(shop, DAYS) : null,
+  ]);
 
   const count = (status: string) =>
     byStatus.find((r) => r.status === status)?._count._all ?? 0;
-  const plan = effectivePlan(settings);
 
   // Adds the block to the main product section in one click, no theme editing.
   const themeEditorUrl = `https://${shop}/admin/themes/current/editor?template=product&addAppBlockId=${process.env.SHOPIFY_API_KEY}/notify-me&target=mainSection`;
@@ -115,14 +123,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       detail: titles.get(t.variantId)?.detail ?? "",
       value: t._count._all,
     })),
-    trend: await activity(shop, data?.shop?.ianaTimezone ?? "UTC", DAYS),
+    trend,
     emailTested: Boolean(settings?.testSentAt),
     widgetStyled: Boolean(data?.currentAppInstallation?.metafield),
     setupDismissed: Boolean(settings?.setupDismissedAt),
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
     plan: { id: plan, name: PLANS[plan].name, used: emailsUsed(settings), limit: PLANS[plan].emails },
-    sales: atLeast(plan, "growth") ? await sales(shop, DAYS) : null,
+    sales: salesData,
   };
 };
 
