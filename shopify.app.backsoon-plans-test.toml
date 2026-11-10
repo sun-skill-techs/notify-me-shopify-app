@@ -1,0 +1,54 @@
+# Public test app for Shopify App Pricing (BackSoon Dev is custom-distributed, which can't have plans): `shopify app dev --config backsoon-plans-test`. Never submit it for review.
+# URLs are placeholders; the CLI swaps them for the tunnel on `app dev`.
+
+client_id = "76296f9c48f8af7a91028c9ef0f1af4a"
+name = "BackSoon Plans Test"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_customers,read_orders,read_products,write_app_proxy,write_customers"
+
+[app_proxy]
+url = "https://example.com/proxy"
+prefix = "apps"
+subpath = "notify-me"
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/variants/in_stock"
+  topics = [ "variants/in_stock" ]
+
+  # Growth analytics: matches orders to the restock email before them.
+  # Off in dev until BackSoon Dev has protected customer data access; prod toml keeps it.
+  # [[webhooks.subscriptions]]
+  # uri = "/webhooks/orders/create"
+  # topics = [ "orders/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://example.com/auth/callback" ]
+
+[build]
+automatically_update_urls_on_dev = true
