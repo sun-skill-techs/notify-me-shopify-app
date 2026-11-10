@@ -127,7 +127,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeHandle,
     days,
     activity: await activity(session.shop, timezone, days),
-    canExport: atLeast(await shopPlan(session.shop), "basic"),
+    canExport: atLeast(await shopPlan(session.shop), "starter"),
   };
 };
 
@@ -200,11 +200,11 @@ function ExportButton({ allowed }: { allowed: boolean }) {
       setBusy(false);
     }
   };
-  // CSV export is a Basic feature.
+  // CSV export is a Starter feature.
   if (!allowed) {
     return (
       <s-button slot="secondary-actions" icon="lock" href="/app/plans">
-        Export CSV (Basic plan)
+        Export CSV (Starter plan)
       </s-button>
     );
   }

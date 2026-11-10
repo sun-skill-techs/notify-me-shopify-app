@@ -49,7 +49,7 @@ export async function saveWidget(admin: Admin, ownerId: string, settings: Widget
   return (result.data?.metafieldsSet?.userErrors?.[0]?.message as string | undefined) ?? null;
 }
 
-/** Custom CSS is a Basic feature: drop it from the storefront when a store moves to Free. */
+/** Custom CSS is a Starter feature: drop it from the storefront when a store moves to Free. */
 export async function dropCustomCss(admin: Admin) {
   const { ownerId, settings } = await readWidget(admin);
   if (!ownerId || !settings.customCss) return;

@@ -74,14 +74,14 @@ model ShopSettings {
   plan          String    @default("free")
   planCheckedAt DateTime?
   shopGid       String?
-  // Installed before paid plans launched: Basic stays free.
+  // Installed before paid plans launched: Starter stays free.
   grandfathered Boolean   @default(false)
   // Restock emails sent in usageMonth ("2026-11"), counted against the plan.
   usageMonth    String    @default("")
   usageCount    Int       @default(0)
-  // Grow: email every restock, not just the first.
+  // Growth: email every restock, not just the first.
   renotify      Boolean   @default(false)
-  // Grow: email template. Empty means the built-in default.
+  // Growth: email template. Empty means the built-in default.
   emailHeading     String @default("")
   emailBody        String @default("")
   emailButton      String @default("")

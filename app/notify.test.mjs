@@ -212,11 +212,13 @@ const { planFromHandles, effectivePlan } = await import("./plans.server.ts");
 const { loader: clickLoader } = await import("./routes/c.$id.tsx");
 const { trackedUrl } = await import("./notify.server.ts");
 assert.equal(planFromHandles([]), "free");
-assert.equal(planFromHandles(["basic-yearly"]), "basic");
-assert.equal(planFromHandles(["Grow"]), "grow");
+assert.equal(planFromHandles(["starter-yearly"]), "starter");
+assert.equal(planFromHandles(["Growth"]), "growth");
+assert.equal(planFromHandles(["pro-yearly"]), "pro");
+assert.equal(planFromHandles(["product"]), "free");
 assert.equal(effectivePlan(null), "free");
-assert.equal(effectivePlan({ plan: "free", grandfathered: true }), "basic");
-assert.equal(effectivePlan({ plan: "grow", grandfathered: true }), "grow");
+assert.equal(effectivePlan({ plan: "free", grandfathered: true }), "starter");
+assert.equal(effectivePlan({ plan: "growth", grandfathered: true }), "growth");
 assert.equal(effectivePlan({ plan: "bogus", grandfathered: false }), "free");
 
 const month = new Date().toISOString().slice(0, 7);
@@ -274,8 +276,8 @@ assert.deepEqual(await restock(), { sent: 1, failed: 0, held: 0 });
 assert.equal(settings.usageMonth, month);
 assert.equal(settings.usageCount, 1);
 
-// Basic: custom subject and sender, no branding, default template.
-settings = freshSettings({ plan: "basic" });
+// Starter: custom subject and sender, no branding, default template.
+settings = freshSettings({ plan: "starter" });
 rows = [{ id: "b1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("b1@x.co"), status: "PENDING" }];
 sent.length = 0;
 await restock();
@@ -284,8 +286,8 @@ assert.equal(sent[0].from, '"Custom Sender" <alerts@example.com>');
 assert.doesNotMatch(sent[0].html, /Sent with/);
 assert.doesNotMatch(sent[0].html, /Guess who/);
 
-// Grow + re-notify: emailed shoppers hear again, but not twice in a day; template applies.
-settings = freshSettings({ plan: "grow", renotify: true });
+// Growth + re-notify: emailed shoppers hear again, but not twice in a day; template applies.
+settings = freshSettings({ plan: "growth", renotify: true });
 rows = [
   { id: "g1", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g1@x.co"), status: "SENT", sentAt: ago(3) },
   { id: "g2", shop: "s.myshopify.com", variantId: "1", ...sealEmail("g2@x.co"), status: "SENT", sentAt: new Date() },
@@ -297,7 +299,7 @@ assert.equal(sent[0].to[0], "g1@x.co");
 assert.match(sent[0].html, /Guess who&#39;s back: Linen shirt/);
 assert.match(sent[0].html, /each time this item is restocked/);
 // Re-notify off: SENT rows are left alone.
-settings = freshSettings({ plan: "grow" });
+settings = freshSettings({ plan: "growth" });
 rows[0].sentAt = ago(3);
 assert.deepEqual(await restock(), { sent: 0, failed: 0, held: 0 });
 

@@ -54,9 +54,9 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
   // so a day-old plan is good enough here; the admin refreshes it every 5 minutes.
   const { settings } = await refreshPlan(shop, { maxAgeMs: 24 * 60 * 60 * 1000 });
   const plan = effectivePlan(settings);
-  // Subject and sender name are Basic features; Free sends the defaults.
-  const custom = atLeast(plan, "basic") ? settings : null;
-  const grow = atLeast(plan, "grow") ? settings : null;
+  // Subject and sender name are Starter features; Free sends the defaults.
+  const custom = atLeast(plan, "starter") ? settings : null;
+  const grow = atLeast(plan, "growth") ? settings : null;
   const subject = (custom?.emailSubject || "{{product}} is back in stock").replace(
     "{{product}}",
     productTitle,
@@ -85,7 +85,7 @@ async function sender(shop: string, info: ShopInfo, productTitle: string) {
 // SENDING forever. After this long it's claimable again. If the crash came
 // after Resend accepted the email, that shopper gets it twice, which beats never.
 const STALE_SENDING_MS = 10 * 60 * 1000;
-// Re-notify (Grow) also picks up shoppers already emailed, but not twice in a
+// Re-notify (Growth) also picks up shoppers already emailed, but not twice in a
 // day, so a variant flapping in and out of stock doesn't flood them.
 const RENOTIFY_GAP_MS = 24 * 60 * 60 * 1000;
 const claimable = (renotify = false) => ({

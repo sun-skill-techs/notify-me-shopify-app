@@ -20,14 +20,14 @@ import widgetCss from "../../extensions/notify-me/assets/notify-me.css?raw";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const [{ settings }, plan] = await Promise.all([readWidget(admin), shopPlan(session.shop)]);
-  return { settings, widgetCss, customCssAllowed: atLeast(plan, "basic") };
+  return { settings, widgetCss, customCssAllowed: atLeast(plan, "starter") };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const settings = sanitize(await request.json().catch(() => null));
-  // Custom CSS is a Basic feature; Free stores save everything else.
-  if (!atLeast(await shopPlan(session.shop), "basic")) settings.customCss = "";
+  // Custom CSS is a Starter feature; Free stores save everything else.
+  if (!atLeast(await shopPlan(session.shop), "starter")) settings.customCss = "";
 
   const { ownerId } = await readWidget(admin);
   if (!ownerId) return { ok: false, message: "Could not find the app installation." };
@@ -321,9 +321,9 @@ export default function WidgetPage() {
               ) : (
                 <s-stack direction="block" gap="small-200">
                   <s-text color="subdued">
-                    Add your own CSS to the button and popup on the Basic plan.
+                    Add your own CSS to the button and popup on the Starter plan.
                   </s-text>
-                  <s-button href="/app/plans" icon="lock">Upgrade to Basic</s-button>
+                  <s-button href="/app/plans" icon="lock">Upgrade to Starter</s-button>
                 </s-stack>
               )}
             </s-section>

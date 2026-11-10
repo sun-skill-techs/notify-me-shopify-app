@@ -16,8 +16,8 @@ export const cell = (raw: string) => {
 // page with App Bridge's fetch so the session token comes along.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, sessionToken } = await authenticate.admin(request);
-  if (!atLeast(await shopPlan(session.shop), "basic")) {
-    return new Response("CSV export is on the Basic plan", { status: 403 });
+  if (!atLeast(await shopPlan(session.shop), "starter")) {
+    return new Response("CSV export is on the Starter plan", { status: 403 });
   }
 
   const rows = await db.restockSubscription.findMany({

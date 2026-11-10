@@ -28,8 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const plan = effectivePlan(settings);
   return {
-    basic: atLeast(plan, "basic"),
-    grow: atLeast(plan, "grow"),
+    basic: atLeast(plan, "starter"),
+    grow: atLeast(plan, "growth"),
     template: Object.fromEntries(
       TEMPLATE_KEYS.map((k) => [k, settings?.[k] ?? ""]),
     ) as EmailTemplate,
@@ -55,11 +55,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const text = (key: string, max: number) => String(form.get(key) ?? "").trim().slice(0, max);
     const data: Record<string, string | boolean> = {};
     // Plan features are enforced here too, not just greyed out in the form.
-    if (atLeast(plan, "basic")) {
+    if (atLeast(plan, "starter")) {
       data.fromName = text("fromName", 80);
       data.emailSubject = text("emailSubject", 200) || "{{product}} is back in stock";
     }
-    if (atLeast(plan, "grow")) {
+    if (atLeast(plan, "growth")) {
       data.emailHeading = text("emailHeading", 200);
       data.emailBody = text("emailBody", 1000);
       data.emailButton = text("emailButton", 40);
@@ -185,9 +185,9 @@ export default function SettingsPage() {
       <s-section heading="Sender and subject">
         <s-stack direction="block" gap="base">
           {!data.basic && (
-            <Upgrade plan="Basic">
+            <Upgrade plan="Starter">
               Set your own sender name and subject line, and remove the
-              &ldquo;Sent with BackSoon&rdquo; line, on the Basic plan.
+              &ldquo;Sent with BackSoon&rdquo; line, on the Starter plan.
             </Upgrade>
           )}
           <s-text-field
@@ -226,9 +226,9 @@ export default function SettingsPage() {
       <s-section heading="Email design">
         <s-stack direction="block" gap="base">
           {!data.grow && (
-            <Upgrade plan="Grow">
+            <Upgrade plan="Growth">
               Change the heading, message, button and logo, and email shoppers
-              on every restock, on the Grow plan.
+              on every restock, on the Growth plan.
             </Upgrade>
           )}
           <s-text-field

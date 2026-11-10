@@ -112,22 +112,29 @@ export default function App() {
             </p>
           </div>
           <div className={styles.card}>
-            <h3>Basic, $9/month</h3>
+            <h3>Starter, $7.99/month</h3>
             <p>
-              {PLANS.basic.emails.toLocaleString("en")} emails a month, your own
+              {PLANS.starter.emails.toLocaleString("en")} emails a month, your own
               sender name and subject, Custom CSS and CSV export.
             </p>
           </div>
           <div className={styles.card}>
-            <h3>Grow, $19/month</h3>
+            <h3>Growth, $14.99/month</h3>
             <p>
-              {PLANS.grow.emails.toLocaleString("en")} emails a month, your own
+              {PLANS.growth.emails.toLocaleString("en")} emails a month, your own
               email design, an email on every restock, and the sales your
               emails bring in.
             </p>
           </div>
+          <div className={styles.card}>
+            <h3>Pro, $29.99/month</h3>
+            <p>
+              {PLANS.pro.emails.toLocaleString("en")} emails a month and
+              everything in Growth.
+            </p>
+          </div>
         </div>
-        <p className={styles.note}>Paid plans start with a 14-day free trial.</p>
+        <p className={styles.note}>Paid plans start with a 7-day free trial.</p>
       </section>
     </PublicPage>
   );

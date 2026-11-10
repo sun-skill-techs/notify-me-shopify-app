@@ -14,7 +14,7 @@ import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../wai
 import { effectivePlan, emailsUsed } from "../plans.server";
 import { atLeast, PLANS } from "../plans";
 
-/** Grow analytics: clicks and orders credited to restock emails in the last `days`. */
+/** Growth analytics: clicks and orders credited to restock emails in the last `days`. */
 async function sales(shop: string, days: number) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const [clicks, revenue] = await Promise.all([
@@ -122,7 +122,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
     plan: { id: plan, name: PLANS[plan].name, used: emailsUsed(settings), limit: PLANS[plan].emails },
-    sales: atLeast(plan, "grow") ? await sales(shop, DAYS) : null,
+    sales: atLeast(plan, "growth") ? await sales(shop, DAYS) : null,
   };
 };
 
@@ -334,7 +334,7 @@ export default function Index() {
               ? "Shoppers stay on the waitlist and are emailed on the next restock once you upgrade or the month resets."
               : "Upgrade to keep emails going out."}
           </s-paragraph>
-          {plan.id !== "grow" && (
+          {plan.id !== "pro" && (
             <s-button slot="secondary-actions" href="/app/plans">
               Upgrade plan
             </s-button>
@@ -427,10 +427,10 @@ export default function Index() {
         ) : (
           <s-stack direction="block" gap="small-200">
             <s-text color="subdued">
-              See how many shoppers clicked through and what they bought, on the Grow plan.
+              See how many shoppers clicked through and what they bought, on the Growth plan.
             </s-text>
             <s-button href="/app/plans" icon="lock">
-              Upgrade to Grow
+              Upgrade to Growth
             </s-button>
           </s-stack>
         )}
@@ -454,7 +454,7 @@ export default function Index() {
               <div style={{ width: `${Math.min(100, usage * 100)}%` }} />
             </div>
           </s-stack>
-          <s-link href="/app/plans">{plan.id === "grow" ? "Change plan" : "Upgrade"}</s-link>
+          <s-link href="/app/plans">{plan.id === "pro" ? "Change plan" : "Upgrade"}</s-link>
         </s-stack>
       </s-section>
 

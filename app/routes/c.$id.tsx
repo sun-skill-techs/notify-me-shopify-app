@@ -4,7 +4,7 @@ import db from "../db.server";
 import { clickToken } from "../notify.server";
 
 // GET /c/:id?u=<product url>&t=<signature>: the Shop now link in restock emails.
-// Records the first click (Grow analytics), then sends the shopper on.
+// Records the first click (Growth analytics), then sends the shopper on.
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const target = url.searchParams.get("u") ?? "";

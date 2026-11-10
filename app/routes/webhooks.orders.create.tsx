@@ -14,7 +14,7 @@ type Order = {
   line_items?: { variant_id: number | null; price: string; quantity: number }[];
 };
 
-// Grow analytics: ties an order back to the restock email that preceded it.
+// Growth analytics: ties an order back to the restock email that preceded it.
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, payload } = await verifyWebhook(request);
   const order = payload as Order;

@@ -1,7 +1,7 @@
 // The restock email's HTML. No server imports, so the settings page can
 // render its live preview with the same function that sends.
 
-/** Grow plan email template. Empty fields use the built-in copy. */
+/** Growth plan email template. Empty fields use the built-in copy. */
 export type EmailTemplate = {
   emailHeading: string;
   emailBody: string;
@@ -28,7 +28,7 @@ export type RestockEmail = {
   template?: EmailTemplate;
   // Free plan: a small "Sent with BackSoon" line in the footer.
   branded?: boolean;
-  // Grow re-notify: the shopper hears about every restock, so say so.
+  // Growth re-notify: the shopper hears about every restock, so say so.
   repeat?: boolean;
 };
 

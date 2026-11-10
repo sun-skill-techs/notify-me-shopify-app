@@ -9,16 +9,17 @@ import { PLANS, type PlanId } from "./plans";
 type Settings = Awaited<ReturnType<typeof db.shopSettings.findUnique>>;
 
 // Plan handles come from the Partner Dashboard, so match on the name:
-// "basic", "basic-yearly" and "Basic plan" all count as Basic.
+// "starter", "starter-yearly" and "Starter plan" all count as Starter.
 export function planFromHandles(handles: (string | null | undefined)[]): PlanId {
   const h = handles.join(" ").toLowerCase();
-  return h.includes("grow") ? "grow" : h.includes("basic") ? "basic" : "free";
+  if (/\bpro\b/.test(h)) return "pro";
+  return h.includes("growth") ? "growth" : h.includes("starter") ? "starter" : "free";
 }
 
-/** The plan whose features apply. Grandfathered stores get at least Basic. */
+/** The plan whose features apply. Grandfathered stores get at least Starter. */
 export function effectivePlan(s: Pick<NonNullable<Settings>, "plan" | "grandfathered"> | null): PlanId {
   const plan: PlanId = s && s.plan in PLANS ? (s.plan as PlanId) : "free";
-  return s?.grandfathered && plan === "free" ? "basic" : plan;
+  return s?.grandfathered && plan === "free" ? "starter" : plan;
 }
 
 const month = (now = new Date()) => now.toISOString().slice(0, 7);
@@ -90,7 +91,7 @@ export async function refreshPlan(
 ) {
   const s = await db.shopSettings.findUnique({ where: { shop } });
   // Without Partner API credentials every store stays on its stored plan (Free,
-  // or Basic if grandfathered). Warned about once at startup, below.
+  // or Starter if grandfathered). Warned about once at startup, below.
   if (!partnerApiConfigured) return { settings: s, refreshed: false };
   if (s?.planCheckedAt && Date.now() - s.planCheckedAt.getTime() < maxAgeMs) {
     return { settings: s, refreshed: false };
