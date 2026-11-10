@@ -4,26 +4,22 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { effectivePlan, emailsUsed } from "../plans.server";
-import { PLANS, TRIAL_DAYS, type PlanId } from "../plans";
+import { PLANS, TRIAL_DAYS, atLeast, type PlanId } from "../plans";
 
-// What each plan adds over the one before. Keep in step with the atLeast() checks.
-const FEATURES: Record<PlanId, string[]> = {
-  free: ["Notify me button", "Emails in your language", "Waitlist and demand charts"],
-  starter: [
-    "Everything in Free",
-    "Your own sender name",
-    "No BackSoon branding",
-    "Custom CSS",
-    "Waitlist CSV export",
-  ],
-  growth: [
-    "Everything in Starter",
-    "Your logo and button color",
-    "Email on every restock",
-    "Sales from restock emails",
-  ],
-  pro: ["Everything in Growth", "5× the emails of Growth"],
-};
+// Every card lists every feature, ticked from the plan that unlocks it.
+// Keep in step with the atLeast() checks.
+const FEATURES: [string, PlanId][] = [
+  ["Notify me button & popup", "free"],
+  ["Emails in your language", "free"],
+  ["Waitlist & demand charts", "free"],
+  ["Your own sender name", "starter"],
+  ["No BackSoon branding", "starter"],
+  ["Custom CSS", "starter"],
+  ["Waitlist CSV export", "starter"],
+  ["Logo & button color", "growth"],
+  ["Re-email on every restock", "growth"],
+  ["Revenue tracking", "growth"],
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -92,9 +88,6 @@ export default function PlansPage() {
         <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
           {(Object.keys(PLANS) as PlanId[]).map((id) => {
             const p = PLANS[id];
-            const [first, ...rest] = FEATURES[id];
-            const base = first.startsWith("Everything") ? first : null;
-            const items = base ? rest : FEATURES[id];
             const isCurrent = id === current;
             return (
               <s-section key={id}>
@@ -109,8 +102,8 @@ export default function PlansPage() {
                       )}
                     </s-stack>
                     <p className="bs-price">
-                      {p.price ? `$${p.price}` : "Free"}
-                      {p.price > 0 && <span>/month</span>}
+                      ${p.price}
+                      <span>/month</span>
                     </p>
                     <s-text color="subdued">
                       {p.price ? `${TRIAL_DAYS}-day free trial` : "Free forever"}
@@ -118,36 +111,36 @@ export default function PlansPage() {
                   </s-stack>
 
                   <div className="bs-quota">
-                    <s-text type="strong">{p.emails.toLocaleString("en")} emails</s-text>{" "}
-                    <s-text color="subdued">a month</s-text>
+                    <s-text type="strong">{p.emails.toLocaleString("en")}</s-text>{" "}
+                    <s-text color="subdued">emails / month</s-text>
                   </div>
+
+                  {isCurrent ? (
+                    <s-button inlineSize="fill" disabled>
+                      Current plan
+                    </s-button>
+                  ) : (
+                    <s-button
+                      href={url}
+                      target="_top"
+                      inlineSize="fill"
+                      variant={id === "growth" ? "primary" : "secondary"}
+                    >
+                      {plan.price < p.price ? `Upgrade to ${p.name}` : `Switch to ${p.name}`}
+                    </s-button>
+                  )}
 
                   <s-stack direction="block" gap="small-200">
-                    {base && <s-text type="strong">{base}, plus:</s-text>}
-                    {items.map((f) => (
-                      <s-grid key={f} gridTemplateColumns="auto 1fr" gap="small-200">
-                        <s-icon type="check" tone="success" />
-                        <s-text>{f}</s-text>
-                      </s-grid>
-                    ))}
+                    {FEATURES.map(([f, min]) => {
+                      const has = atLeast(id, min);
+                      return (
+                        <s-grid key={f} gridTemplateColumns="auto 1fr" gap="small-200">
+                          <s-icon type={has ? "check" : "x"} tone={has ? "success" : "neutral"} />
+                          <s-text color={has ? "base" : "subdued"}>{f}</s-text>
+                        </s-grid>
+                      );
+                    })}
                   </s-stack>
-
-                  <div className="bs-cta">
-                    {isCurrent ? (
-                      <s-button inlineSize="fill" disabled>
-                        Current plan
-                      </s-button>
-                    ) : (
-                      <s-button
-                        href={url}
-                        target="_top"
-                        inlineSize="fill"
-                        variant={id === "growth" ? "primary" : "secondary"}
-                      >
-                        {plan.price < p.price ? `Upgrade to ${p.name}` : `Switch to ${p.name}`}
-                      </s-button>
-                    )}
-                  </div>
                 </div>
               </s-section>
             );
@@ -172,7 +165,6 @@ const PLANS_CSS = `
   .bs-price { display: flex; align-items: baseline; gap: 4px; height: 36px; margin: 8px 0 0; font-size: 30px; font-weight: 700; line-height: 36px; letter-spacing: -0.5px; }
   .bs-price span { font-size: 14px; font-weight: 450; color: #616161; letter-spacing: 0; }
   .bs-quota { padding: 10px 12px; border-radius: 8px; background: #f1f1f1; }
-  .bs-cta { margin-top: auto; padding-top: 4px; }
 `;
 
 export const headers: HeadersFunction = (headersArgs) => {
