@@ -126,6 +126,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     trend,
     emailTested: Boolean(settings?.testSentAt),
     widgetStyled: Boolean(data?.currentAppInstallation?.metafield),
+    blockSeen: Boolean(settings?.blockSeenAt),
     setupDismissed: Boolean(settings?.setupDismissedAt),
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
@@ -239,6 +240,7 @@ export default function Index() {
     trend,
     emailTested,
     widgetStyled,
+    blockSeen,
     setupDismissed,
     reviewDismissed,
     themeEditorUrl,
@@ -254,9 +256,9 @@ export default function Index() {
   const tasks: Task[] = [
     {
       id: "block",
-      done: hasSignups,
+      done: blockSeen || hasSignups,
       title: "Add the button to your product page",
-      body: "Opens the theme editor with the block already placed. Press Save. The button only shows on sold-out variants, so in-stock products look the same. This checks off when your first shopper signs up.",
+      body: "Opens the theme editor with the block already placed. Press Save. The button only shows on sold-out variants, so in-stock products look the same. This checks off once the block shows in the theme editor.",
       action: (
         <s-button href={themeEditorUrl} target="_blank" variant="primary" icon="theme-template">
           Open theme editor

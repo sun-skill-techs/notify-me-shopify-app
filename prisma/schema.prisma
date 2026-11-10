@@ -70,6 +70,8 @@ model ShopSettings {
   testSentAt  DateTime?
   setupDismissedAt DateTime?
   reviewPromptDismissedAt DateTime?
+  // The storefront block rendered in the theme editor (app/routes/proxy.seen.tsx).
+  blockSeenAt DateTime?
   // Billing (app/plans.server.ts): the Partner API plan, cached.
   plan          String    @default("free")
   planCheckedAt DateTime?

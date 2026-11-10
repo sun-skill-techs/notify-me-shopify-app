@@ -191,10 +191,24 @@ document.addEventListener("change", (event) => {
   for (const root of targets?.length ? targets : roots()) syncVariant(root, variantId);
 });
 
+// In the theme editor, tell the app the block is placed, so Home's setup guide
+// ticks "Add the button" before the first shopper signs up. Once per page.
+let seen = false;
+const markSeen = () => {
+  const root = roots()[0];
+  if (seen || !window.Shopify?.designMode || !root) return;
+  seen = true;
+  fetch(`${root.dataset.proxy}/seen`, { method: "POST" }).catch(() => {});
+};
+// The editor re-renders a section (no page load) when a block is added to it.
+document.addEventListener("shopify:section:load", markSeen);
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", syncFromUrl);
+  document.addEventListener("DOMContentLoaded", markSeen);
 } else {
   syncFromUrl();
+  markSeen();
 }
 window.addEventListener("popstate", syncFromUrl);
 
