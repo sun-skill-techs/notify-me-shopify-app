@@ -11,7 +11,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { buyableVariant, notifyVariant } from "../notify.server";
 import { activity } from "../activity.server";
-import { shopPlan } from "../plans.server";
+import { effectivePlan } from "../plans.server";
 import { atLeast } from "../plans";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
 
@@ -22,7 +22,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const requested = Number(new URL(request.url).searchParams.get("days"));
   const days = RANGES.includes(requested) ? requested : 30;
 
-  const [shopResponse, rows, plan] = await Promise.all([
+  const [shopResponse, rows, settings] = await Promise.all([
     admin.graphql(
       `#graphql
         query notifyMeShopTimezone { shop { ianaTimezone } }`,
@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop: session.shop },
       _count: { _all: true },
     }),
-    shopPlan(session.shop),
+    db.shopSettings.findUnique({ where: { shop: session.shop } }),
   ]);
   const timezone = (await shopResponse.json()).data?.shop?.ianaTimezone ?? "UTC";
 
@@ -132,7 +132,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeHandle,
     days,
     activity: trend,
-    canExport: atLeast(plan, "starter"),
+    canExport: atLeast(effectivePlan(settings), "starter"),
+    blockSeen: Boolean(settings?.blockSeenAt),
   };
 };
 
@@ -221,7 +222,8 @@ function ExportButton({ allowed }: { allowed: boolean }) {
 }
 
 export default function WaitlistPage() {
-  const { variants, totals, storeHandle, days, activity, canExport } = useLoaderData<typeof loader>();
+  const { variants, totals, storeHandle, days, activity, canExport, blockSeen } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [, setSearchParams] = useSearchParams();
@@ -249,13 +251,15 @@ export default function WaitlistPage() {
               <s-icon type="person-list" tone="neutral" size="base" />
               <s-heading>No one is waiting yet</s-heading>
               <s-paragraph color="subdued">
-                Once the app block is live on your product template, sold-out
-                variants collect signups here, ranked by how many shoppers are
-                waiting.
+                {blockSeen
+                  ? "The button is on your product page. When a shopper signs up on a sold-out variant, it shows here, ranked by how many are waiting."
+                  : "Once the app block is live on your product template, sold-out variants collect signups here, ranked by how many shoppers are waiting."}
               </s-paragraph>
-              <s-button href="/app" variant="primary" icon="theme-template">
-                Finish setup
-              </s-button>
+              {!blockSeen && (
+                <s-button href="/app" variant="primary" icon="theme-template">
+                  Finish setup
+                </s-button>
+              )}
             </s-stack>
           </s-box>
         </s-section>
