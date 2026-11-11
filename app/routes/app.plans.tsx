@@ -116,7 +116,8 @@ export default function PlansPage() {
         <s-grid gridTemplateColumns="repeat(auto-fit, minmax(210px, 1fr))" gap="base">
           {(Object.keys(PLANS) as PlanId[]).map((id) => {
             const p = PLANS[id];
-            const isCurrent = id === current;
+            // Early users aren't subscribed to Pro, so every paid plan stays choosable.
+            const isCurrent = !grandfathered && id === current;
             return (
               <s-box
                 key={id}
@@ -146,7 +147,7 @@ export default function PlansPage() {
                     </s-text>
                   </s-stack>
 
-                  {!isCurrent && (
+                  {!isCurrent && !(grandfathered && id === "free") && (
                     <s-stack direction="inline">
                       <s-button
                         variant={id === "growth" ? "primary" : "secondary"}
