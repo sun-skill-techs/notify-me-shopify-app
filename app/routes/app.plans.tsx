@@ -1,9 +1,12 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useEffect } from "react";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { effectivePlan, emailsUsed } from "../plans.server";
+import { effectivePlan, emailsUsed, refreshPlan } from "../plans.server";
+import { dropCustomCss } from "../widget.server";
 import { PLANS, TRIAL_DAYS, atLeast, type PlanId } from "../plans";
 
 // Every card lists every feature, ticked from the plan that unlocks it.
@@ -27,23 +30,68 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await db.shopSettings.updateMany({ where: { shop: session.shop }, data: { planCheckedAt: null } });
   const settings = await db.shopSettings.findUnique({ where: { shop: session.shop } });
 
-  // The dev app has its own handle; set SHOPIFY_APP_HANDLE for it.
-  const appHandle = process.env.SHOPIFY_APP_HANDLE || "restock-alerts-sun-skill-techs";
   return {
     current: effectivePlan(settings),
     used: emailsUsed(settings),
     grandfathered: Boolean(settings?.grandfathered && settings.plan === "free"),
-    // Shopify hosts the checkout; shopify://admin opens it without reloading the admin.
-    url: `shopify://admin/charges/${appHandle}/pricing_plans`,
+    trialAvailable: !settings?.trialUsedAt,
   };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session, billing, admin } = await authenticate.admin(request);
+  const id = String((await request.formData()).get("plan") ?? "") as PlanId;
+  if (!(id in PLANS)) return { ok: false, message: "Unknown plan" };
+
+  if (id === "free") {
+    const { appSubscriptions } = await billing.check();
+    for (const sub of appSubscriptions) {
+      await billing.cancel({ subscriptionId: sub.id, isTest: sub.test, prorate: true });
+    }
+    const { settings } = await refreshPlan(session.shop, { maxAgeMs: 0 });
+    if (effectivePlan(settings) === "free") await dropCustomCss(admin);
+    return { ok: true, message: "You're on the Free plan" };
+  }
+
+  // Development stores (including Shopify's app review store) can't be charged,
+  // so they get a test subscription that behaves the same and bills nothing.
+  const res = await admin.graphql(`#graphql
+    query notifyMeShopPlan { shop { plan { partnerDevelopment } } }`);
+  const isTest = Boolean((await res.json()).data?.shop?.plan?.partnerDevelopment);
+  const settings = await db.shopSettings.findUnique({ where: { shop: session.shop } });
+  const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
+
+  try {
+    // Throws a redirect to Shopify's approval page for this plan; app.tsx
+    // re-checks the plan when Shopify sends the merchant back with charge_id.
+    return await billing.request({
+      plan: PLANS[id].name,
+      isTest,
+      trialDays: settings?.trialUsedAt ? 0 : TRIAL_DAYS,
+      returnUrl: `https://admin.shopify.com/store/${storeHandle}/apps/${process.env.SHOPIFY_API_KEY}/app/plans`,
+    });
+  } catch (e) {
+    if (e instanceof Response) throw e;
+    console.error("notify-me: billing request failed", e);
+    return { ok: false, message: "Couldn't open Shopify's approval page. Try again." };
+  }
 };
 
 
 export default function PlansPage() {
-  const { current, used, grandfathered, url } = useLoaderData<typeof loader>();
+  const { current, used, grandfathered, trialAvailable } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<typeof action>();
+  const shopify = useAppBridge();
+  const busy = fetcher.state !== "idle";
   const plan = PLANS[current];
   const left = Math.max(0, plan.emails - used);
   const usage = Math.min(1, used / plan.emails);
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      shopify.toast.show(fetcher.data.message, { isError: !fetcher.data.ok });
+    }
+  }, [fetcher.state, fetcher.data, shopify]);
 
   return (
     <s-page heading="Plans">
@@ -58,7 +106,9 @@ export default function PlansPage() {
           this month. Resets on the 1st.{" "}
           {left === 0
             ? "New restock emails wait until you upgrade or the month resets."
-            : `Paid plans start with a ${TRIAL_DAYS}-day free trial, billed by Shopify.`}
+            : trialAvailable
+              ? `Paid plans start with a ${TRIAL_DAYS}-day free trial, billed by Shopify.`
+              : "Paid plans are billed monthly by Shopify."}
         </s-paragraph>
       </s-banner>
 
@@ -92,16 +142,16 @@ export default function PlansPage() {
                       <span>{p.price ? "/ month" : "forever"}</span>
                     </p>
                     <s-text color="subdued">
-                      {p.price ? `${TRIAL_DAYS}-day free trial` : "No card needed"}
+                      {!p.price ? "No card needed" : trialAvailable ? `${TRIAL_DAYS}-day free trial` : "Billed monthly"}
                     </s-text>
                   </s-stack>
 
                   {!isCurrent && (
                     <s-stack direction="inline">
                       <s-button
-                        href={url}
-                        target="_top"
                         variant={id === "growth" ? "primary" : "secondary"}
+                        disabled={busy}
+                        onClick={() => fetcher.submit({ plan: id }, { method: "post" })}
                       >
                         {`Choose ${p.name}`}
                       </s-button>

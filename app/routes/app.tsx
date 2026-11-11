@@ -10,23 +10,17 @@ import { dropCustomCss } from "../widget.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // Keep the cached plan fresh while the merchant is in the app (Shopify App
-  // Pricing sends no webhook on plan changes). Shopify adds plan_handle when it
-  // sends the merchant back after choosing a plan: check right away.
+  // Keep the cached plan fresh while the merchant is in the app. Shopify adds
+  // charge_id when it sends the merchant back from approving a plan: check right away.
   const url = new URL(request.url);
-  const chosePlan = url.searchParams.has("plan_handle");
+  const chosePlan = url.searchParams.has("charge_id");
   const { settings, refreshed } = await refreshPlan(session.shop, {
     maxAgeMs: chosePlan ? 0 : undefined,
-    getShopGid: async () => {
-      const res = await admin.graphql(`#graphql
-        query notifyMeShopId { shop { id } }`);
-      return (await res.json()).data.shop.id;
-    },
   });
   if (refreshed && effectivePlan(settings) === "free") await dropCustomCss(admin);
   // The page loaded alongside this one read the old plan; load it again.
   if (chosePlan) {
-    url.searchParams.delete("plan_handle");
+    url.searchParams.delete("charge_id");
     throw redirect(url.pathname + url.search);
   }
 

@@ -1,5 +1,5 @@
 // Plan names, monthly prices (USD) and restock-email allowances. Shared by the
-// server and the admin UI. Keep in step with the plans in the Partner Dashboard.
+// server, the billing config (shopify.server.ts) and the admin UI.
 export const PLANS = {
   free: { name: "Free", price: 0, emails: 50 },
   starter: { name: "Starter", price: 7.99, emails: 1000 },

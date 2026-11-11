@@ -234,14 +234,14 @@ assert.equal((await buyableVariant(variantAdmin({ status: "ACTIVE", onlineStoreU
 assert.equal(await buyableVariant(variantAdmin({ status: "DRAFT", onlineStoreUrl: null }), gid), null);
 
 // --- Plans ---
-const { planFromHandles, effectivePlan } = await import("./plans.server.ts");
+const { planFromNames, effectivePlan } = await import("./plans.server.ts");
 const { loader: clickLoader } = await import("./routes/c.$id.tsx");
 const { trackedUrl } = await import("./notify.server.ts");
-assert.equal(planFromHandles([]), "free");
-assert.equal(planFromHandles(["starter-yearly"]), "starter");
-assert.equal(planFromHandles(["Growth"]), "growth");
-assert.equal(planFromHandles(["pro-yearly"]), "pro");
-assert.equal(planFromHandles(["product"]), "free");
+assert.equal(planFromNames([]), "free");
+assert.equal(planFromNames(["Starter"]), "starter");
+assert.equal(planFromNames(["Growth"]), "growth");
+assert.equal(planFromNames(["Pro"]), "pro");
+assert.equal(planFromNames(["product"]), "free");
 assert.equal(effectivePlan(null), "free");
 assert.equal(effectivePlan({ plan: "free", grandfathered: true }), "starter");
 assert.equal(effectivePlan({ plan: "growth", grandfathered: true }), "growth");
@@ -273,6 +273,13 @@ const freshSettings = (extra) => ({
   emailLogoUrl: "",
   ...extra,
 });
+
+// A failed plan check (no session, Shopify down) keeps the cached plan, never downgrades.
+const { refreshPlan } = await import("./plans.server.ts");
+settings = freshSettings({ plan: "growth", planCheckedAt: null });
+const checked = await refreshPlan("s.myshopify.com", { maxAgeMs: 0 });
+assert.equal(checked.refreshed, false);
+assert.equal(checked.settings.plan, "growth");
 
 // Free: one email left this month, so the second shopper waits; own subject, default sender, design and branding.
 settings = freshSettings({ usageCount: 49 });

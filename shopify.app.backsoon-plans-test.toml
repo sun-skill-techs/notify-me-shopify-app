@@ -1,4 +1,4 @@
-# Public test app for Shopify App Pricing (BackSoon Dev is custom-distributed, which can't have plans): `shopify app dev --config backsoon-plans-test`. Never submit it for review.
+# Public test app for paid plans (BackSoon Dev is custom-distributed, which can't bill): `shopify app dev --config backsoon-plans-test`. Never submit it for review.
 # URLs are placeholders; the CLI swaps them for the tunnel on `app dev`.
 
 client_id = "bd0ab1246bf0cdac2e768a63d8f31a93"
