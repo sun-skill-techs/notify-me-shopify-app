@@ -243,7 +243,12 @@ assert.equal(planFromNames(["Growth"]), "growth");
 assert.equal(planFromNames(["Pro"]), "pro");
 assert.equal(planFromNames(["product"]), "free");
 assert.equal(effectivePlan(null), "free");
-assert.equal(effectivePlan({ plan: "free", grandfathered: true }), "starter");
+const beforeEnd = new Date("2026-12-10T23:00:00Z");
+const afterEnd = new Date("2026-12-11T00:00:00Z");
+assert.equal(effectivePlan({ plan: "free", grandfathered: true }, beforeEnd), "pro");
+assert.equal(effectivePlan({ plan: "free", grandfathered: true }, afterEnd), "free");
+assert.equal(effectivePlan({ plan: "starter", grandfathered: true }, beforeEnd), "starter");
+assert.equal(effectivePlan({ plan: "free", grandfathered: false }, beforeEnd), "free");
 assert.equal(effectivePlan({ plan: "growth", grandfathered: true }), "growth");
 assert.equal(effectivePlan({ plan: "bogus", grandfathered: false }), "free");
 

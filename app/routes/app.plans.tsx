@@ -5,7 +5,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { effectivePlan, emailsUsed, refreshPlan } from "../plans.server";
+import { earlyFree, effectivePlan, emailsUsed, refreshPlan } from "../plans.server";
 import { dropCustomCss } from "../widget.server";
 import { PLANS, TRIAL_DAYS, atLeast, type PlanId } from "../plans";
 
@@ -33,7 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     current: effectivePlan(settings),
     used: emailsUsed(settings),
-    grandfathered: Boolean(settings?.grandfathered && settings.plan === "free"),
+    grandfathered: earlyFree(settings),
     trialAvailable: !settings?.trialUsedAt,
   };
 };
@@ -99,7 +99,7 @@ export default function PlansPage() {
 
       <s-banner
         tone={left === 0 ? "critical" : usage >= 0.8 ? "warning" : "info"}
-        heading={`You're on the ${plan.name} plan${grandfathered ? ", free for early users" : ""}`}
+        heading={`You're on the ${plan.name} plan${grandfathered ? ", free for early users until December 11" : ""}`}
       >
         <s-paragraph>
           {used.toLocaleString("en")} of {plan.emails.toLocaleString("en")} restock emails sent

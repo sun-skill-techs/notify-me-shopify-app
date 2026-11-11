@@ -11,7 +11,7 @@ import db from "../db.server";
 import { activity } from "../activity.server";
 import { METAFIELD } from "../widget";
 import { CHART_CSS, RankedBars, Stat, StatusBreakdown, TrendChart } from "../waitlist-charts";
-import { effectivePlan, emailsUsed } from "../plans.server";
+import { earlyFree, effectivePlan, emailsUsed } from "../plans.server";
 import { atLeast, PLANS } from "../plans";
 
 /** Growth analytics: clicks and orders credited to restock emails in the last `days`. */
@@ -130,6 +130,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     setupDismissed: Boolean(settings?.setupDismissedAt),
     reviewDismissed: Boolean(settings?.reviewPromptDismissedAt),
     themeEditorUrl,
+    earlyUser: earlyFree(settings),
     plan: { id: plan, name: PLANS[plan].name, used: emailsUsed(settings), limit: PLANS[plan].emails },
     sales: salesData,
   };
@@ -244,6 +245,7 @@ export default function Index() {
     setupDismissed,
     reviewDismissed,
     themeEditorUrl,
+    earlyUser,
     plan,
     sales,
   } = useLoaderData<typeof loader>();
@@ -327,6 +329,19 @@ export default function Index() {
         Email settings
       </s-button>
       <style>{CHART_CSS + PROGRESS_CSS}</style>
+
+      {earlyUser && (
+        <s-banner tone="info" heading="BackSoon now has paid plans">
+          <s-paragraph>
+            Thanks for being an early user. You get every feature free until December 11.
+            After that your store moves to the Free plan (50 restock emails a month), unless
+            you choose a paid plan.
+          </s-paragraph>
+          <s-button slot="secondary-actions" href="/app/plans">
+            See plans
+          </s-button>
+        </s-banner>
+      )}
 
       {usage >= 0.8 && (
         <s-banner

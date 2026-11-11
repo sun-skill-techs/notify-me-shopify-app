@@ -17,10 +17,19 @@ export function planFromNames(names: string[]): PlanId {
   return h.includes("growth") ? "growth" : h.includes("starter") ? "starter" : "free";
 }
 
-/** The plan whose features apply. Grandfathered stores get at least Starter. */
-export function effectivePlan(s: Pick<NonNullable<Settings>, "plan" | "grandfathered"> | null): PlanId {
-  const plan: PlanId = s && s.plan in PLANS ? (s.plan as PlanId) : "free";
-  return s?.grandfathered && plan === "free" ? "starter" : plan;
+// Stores installed before paid plans launched get every feature free until this
+// date, then fall to Free like anyone else.
+export const EARLY_USERS_UNTIL = new Date("2026-12-11T00:00:00Z");
+
+/** True while a grandfathered store with no paid plan is in its free month. */
+export function earlyFree(s: Pick<NonNullable<Settings>, "plan" | "grandfathered"> | null, now = new Date()) {
+  return Boolean(s?.grandfathered && !(s.plan in PLANS && s.plan !== "free") && now < EARLY_USERS_UNTIL);
+}
+
+/** The plan whose features apply. Grandfathered stores get Pro during their free month. */
+export function effectivePlan(s: Pick<NonNullable<Settings>, "plan" | "grandfathered"> | null, now = new Date()): PlanId {
+  if (earlyFree(s, now)) return "pro";
+  return s && s.plan in PLANS ? (s.plan as PlanId) : "free";
 }
 
 const month = (now = new Date()) => now.toISOString().slice(0, 7);
