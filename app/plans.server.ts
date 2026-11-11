@@ -69,7 +69,8 @@ async function fetchPlan(shopGid: string): Promise<PlanId> {
         query: `query ($appId: ID!, $shopId: ID!) {
           activeSubscription(appId: $appId, shopId: $shopId) { items { handle } }
         }`,
-        variables: { appId: SHOPIFY_APP_GID, shopId: shopGid },
+        // The Partner Dashboard shows gid://partners/App/…; the API only takes gid://shopify/App/….
+        variables: { appId: SHOPIFY_APP_GID?.replace("gid://partners/", "gid://shopify/"), shopId: shopGid },
       }),
     },
   );
